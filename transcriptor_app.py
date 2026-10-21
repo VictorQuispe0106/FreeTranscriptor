@@ -24,11 +24,17 @@ import threading
 import time
 import tkinter as tk
 from datetime import datetime
+from pathlib import Path
 from tkinter import messagebox, ttk
+
+import pi_bridge
+from fluidez import clean
+from transcript_lines import parse_markdown, read_markdown, to_txt, write_utf8
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 WATCHER = os.path.join(PROJECT_DIR, "captions_watch.ps1")
 TRANSCRIPTS_DIR = os.path.join(PROJECT_DIR, "transcripts")
+SNAPSHOTS_DIR = os.path.join(TRANSCRIPTS_DIR, ".snapshots")
 LIVE_CAPTURES = os.path.join(os.environ.get("WINDIR", r"C:\\Windows"),
                              "System32", "LiveCaptions.exe")
 
@@ -133,6 +139,8 @@ class App(ttk.Frame):
         root.minsize(560, 380)
 
         self.session: WatcherSession | None = None
+        self.last_transcript = ""
+        self.summary_cancel: threading.Event | None = None
         self.status_var = tk.StringVar(value="Listo.")
         self._build()
         self.pack(fill="both", expand=True)
@@ -155,9 +163,19 @@ class App(ttk.Frame):
                                    state="disabled")
         self.btn_open = ttk.Button(buttons, text="Abrir transcript",
                                    command=self.open_transcript, state="disabled")
+        self.btn_export = ttk.Button(buttons, text="Exportar TXT",
+                                     command=self.export_txt, state="disabled")
+        self.btn_summary = ttk.Button(buttons, text="Resumir con Pi",
+                                      command=self.run_summary, state="disabled")
+        self.btn_cancel = ttk.Button(buttons, text="Cancelar resumen",
+                                     command=self.cancel_summary, state="disabled")
         self.btn_start.pack(side="left", padx=(0, 8))
         self.btn_stop.pack(side="left", padx=(0, 8))
-        self.btn_open.pack(side="left")
+        self.btn_open.pack(side="left", padx=(0, 8))
+        self.btn_export.pack(side="left", padx=(0, 8))
+        self.btn_summary.pack(side="left", padx=(0, 8))
+        self.btn_cancel.pack(side="left")
+        threading.Thread(target=self._probe_pi, daemon=True).start()
 
         self.lines = tk.Text(self, height=14, wrap="word", state="disabled")
         self.lines.grid(column=0, row=2, sticky="nsew", padx=12, pady=(4, 4))
@@ -168,7 +186,23 @@ class App(ttk.Frame):
         status = ttk.Label(self, textvariable=self.status_var, anchor="w")
         status.grid(column=0, row=3, sticky="ew", padx=12, pady=(0, 10))
 
+    # --- pi probe --------------------------------------------------------- #
+
+    def _probe_pi(self) -> None:
+        ok = pi_bridge.available()
+        self.root.after(0, lambda: self.btn_summary.configure(
+            state="normal" if ok else "disabled"))
+        if not ok:
+            self.root.after(0, lambda: self.status_var.set(
+                "Pi no esta disponible: no se podra resumir."))
+
     # --- actions -------------------------------------------------------- #
+
+    def _remember_transcript(self, path: str) -> None:
+        self.last_transcript = path
+        self.btn_export.configure(state="normal")
+        if pi_bridge.available():
+            self.btn_summary.configure(state="normal")
 
     def start(self) -> None:
         if self.session:
@@ -195,6 +229,7 @@ class App(ttk.Frame):
             self.btn_stop.configure(state="normal")
             self.btn_open.configure(state="normal")
             self.status_var.set("Transcribiendo...")
+            self._remember_transcript(session.out_path)
 
         self.root.after(0, do_start)
 
@@ -210,6 +245,96 @@ class App(ttk.Frame):
             return
         os.startfile(self.session.out_path)  # noqa: S606 (local trusted path)
 
+    def export_txt(self) -> None:
+        source = self.last_transcript
+        if not source or not os.path.exists(source):
+            messagebox.showinfo("Transcriptor en vivo",
+                                "Todavia no hay transcript para exportar.")
+            return
+        target = Path(source).with_suffix(".txt")
+        try:
+            write_utf8(target, to_txt(read_markdown(source)))
+        except OSError as exc:
+            messagebox.showerror("Transcriptor en vivo",
+                                 f"No se pudo escribir el TXT: {exc}")
+            return
+        os.startfile(str(target))  # noqa: S606 (local trusted path)
+
+    def run_summary(self) -> None:
+        if self.summary_cancel:
+            return
+        source = self.last_transcript
+        if not source or not os.path.exists(source):
+            messagebox.showinfo("Transcriptor en vivo",
+                                "Todavia no hay transcript para resumir.")
+            return
+        self.summary_cancel = threading.Event()
+        self.btn_summary.configure(state="disabled")
+        self.btn_start.configure(state="disabled")
+        self.btn_cancel.configure(state="normal")
+        self._append_line("Resumiendo con Pi... (Cancelable)")
+        threading.Thread(target=self._summary_worker, args=(source,),
+                         daemon=True).start()
+
+    def cancel_summary(self) -> None:
+        if self.summary_cancel:
+            self.summary_cancel.set()
+            self.status_var.set("Cancelando resumen...")
+
+    def _summary_worker(self, source: str) -> None:
+        cancel = self.summary_cancel
+        assert cancel is not None
+        stem = Path(source).stem
+        stamp = datetime.now().strftime("%H%M%S")
+        derived = {
+            "snapshot": os.path.join(SNAPSHOTS_DIR, f"{stem}-{stamp}.md"),
+            "limpio": os.path.join(TRANSCRIPTS_DIR, f"{stem}.limpio.md"),
+            "resumen": os.path.join(TRANSCRIPTS_DIR, f"{stem}.resumen.md"),
+        }
+        try:
+            raw = Path(source).read_bytes().decode("utf-8", errors="replace")
+            utterances = parse_markdown(raw)
+            write_utf8(derived["snapshot"], raw)
+            polished = clean(utterances)
+            write_utf8(
+                derived["limpio"],
+                render_limpio(stem, len(utterances), len(polished), polished))
+            self.root.after(0, self._append_line,
+                            f"Texto limpio: {len(utterances)} -> {len(polished)} lineas. "
+                            "Pi esta resumiendo...")
+            summary = pi_bridge.summarize(
+                derived["limpio"], on_delta=self._on_summary_delta,
+                cancel_event=cancel)
+            if cancel.is_set():
+                raise pi_bridge.SummaryError("Resumen cancelado por el usuario.")
+            write_utf8(derived["resumen"], render_resumen(stem, derived, summary,
+                                                          len(polished)))
+        except (pi_bridge.SummaryError, pi_bridge.PiUnavailable, OSError) as exc:
+            self.root.after(0, self._append_line, f"El resumen fallo: {exc}")
+        finally:
+            done = self.summary_cancel is not None and cancel is self.summary_cancel
+            self.summary_cancel = None
+            self.root.after(0, self._summary_done, derived, done)
+
+    def _summary_done(self, derived: dict[str, str], ok: bool) -> None:
+        self.btn_cancel.configure(state="disabled")
+        self.btn_start.configure(state="normal")
+        if pi_bridge.available():
+            self.btn_summary.configure(state="normal")
+        if not ok:
+            self.status_var.set("Resumen cancelado o con error.")
+            return
+        target = derived["resumen"]
+        if os.path.exists(target):
+            self.status_var.set("Resumen listo.")
+            self._append_line(f"Resumen escrito en {target}")
+            os.startfile(target)  # noqa: S606 (local trusted path)
+        else:
+            self.status_var.set("Resumen no generado (ver el log en la ventana).")
+
+    def _on_summary_delta(self, delta: str) -> None:
+        self.root.after(0, self._append_line, delta.rstrip())
+
     # --- callbacks ------------------------------------------------------ #
 
     def _on_line(self, text: str) -> None:
@@ -218,6 +343,11 @@ class App(ttk.Frame):
         self.lines.insert("end", f"[{stamp}] {text}\n")
         self.lines.see("end")
         self.lines.configure(state="disabled")
+
+    def _append_line(self, text: str) -> None:
+        if not text:
+            return
+        self._on_line(text)
 
     def _on_error(self, message: str) -> None:
         self.status_var.set(f"Atencion: {message}")
@@ -239,6 +369,35 @@ class App(ttk.Frame):
         if self.session:
             self.session.stop()
         self.root.destroy()
+
+
+def render_limpio(stem: str, raw_count: int, polished_count: int,
+                  utterances) -> str:
+    """Header + body of the derived «limpio» markdown file."""
+    from fluidez import render_markdown
+
+    title = f"Transcript limpio \u2014 {stem} ({polished_count} de {raw_count} lineas)"
+    meta = [
+        ("Fuente", "Windows Live Captions (UI Automation)"),
+        ("Limpieza", "local, sin IA: duplicados, fragmentos y repeticiones"),
+    ]
+    return render_markdown(title, meta, utterances)
+
+
+def render_resumen(stem: str, derived: dict[str, str], summary: str,
+                   polished_count: int) -> str:
+    """Header + the Pi summary, written to the derived «resumen» file."""
+    header = [
+        f"# Resumen con Pi \u2014 {stem}",
+        "",
+        f"- **Fecha**: {datetime.now():%Y-%m-%d %H:%M}",
+        f"- **Resumido hasta**: el final del archivo ({polished_count} lineas limpias)",
+        f"- **Texto limpio**: {derived['limpio']}",
+        "",
+        "---",
+        "",
+    ]
+    return "\n".join(header) + summary + ("\n" if not summary.endswith("\n") else "")
 
 
 def main() -> int:

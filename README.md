@@ -30,8 +30,25 @@ Doble clic en **`Transcriptor App.bat`** (o `py transcriptor_app.py`).
    el transcript y te muestra las líneas en la ventana.
 2. **Parar** - corta la grabación; Live Captions queda abierto para la próxima.
 3. **Abrir transcript** - abre el `.md` del que se escribió en esa sesión.
+4. **Exportar TXT** - escribe el texto plano con timestamps (`[hh:mm:ss] frase`) y lo abre.
+5. **Resumir con Pi** - genera el resumen del transcript con IA (ver abajo).
+6. **Cancelar resumen** - corta el resumen en curso.
 
 Cada sesión guarda en `transcripts\<fecha>_live-captions.md`.
+
+## Resumen con IA (Pi local, sin API keys)
+
+**Resumir con Pi** manda el transcript al asistente Pi que ya tenés instalado y configurado
+(usando tu modelo de siempre, una corrida por clic, como una llamada de API):
+
+- Escribe primero `transcripts\<stem>.limpio.md`: sin IA, junta frases cortadas, colapsa
+  las líneas repetidas que reescribe Live Captions y quita repeticiones de palabras.
+- Resume **sobre el texto limpio** y escribe `transcripts\<stem>.resumen.md` con secciones fijas:
+  `## Resumen`, `## Puntos clave`, `## Decisiones`, `## Acciones`, `## Pendientes`, `## Citas`.
+- Guarda una copia exacta de lo resumido en `transcripts\.snapshots\`.
+- Podés **Cancelar** en cualquier momento; el transcript crudo y el limpio nunca se tocan.
+- El proceso de Pi corre contenido (solo lectura de archivos). No consume keys, no usa sesión,
+  no instala nada; sí consume los tokens de tu plan de Pi, por eso es siempre a botón.
 
 ## Modo Live Captions (recomendado: funciona hoy)
 

@@ -184,11 +184,13 @@ def summarize(
     *,
     on_delta: Callable[[str], None] | None = None,
     timeout_s: float = 900.0,
+    cancel_event: "threading.Event" | None = None,
 ) -> str:
     """Summarize one transcript file with one Pi run.
 
     ``on_delta`` is called from the reader thread as text arrives; callers on
-    a GUI must marshal it to their UI thread themselves.
+    a GUI must marshal it to their UI thread themselves. Setting
+    ``cancel_event`` kills the Pi child and the call raises ``SummaryError``.
     """
     if not os.path.exists(path):
         raise SummaryError(f"No existe el archivo del transcript: {path}")
@@ -222,10 +224,22 @@ def summarize(
 
     reader = threading.Thread(target=pump, daemon=True)
     reader.start()
+
+    if cancel_event is not None:
+        def watchdog() -> None:
+            while not done.is_set():
+                if cancel_event.is_set():
+                    proc.kill()
+                    return
+                done.wait(0.2)
+        threading.Thread(target=watchdog, daemon=True).start()
     stderr_tail = threading.Thread(
         target=lambda: proc.stderr.read(), daemon=True)  # type: ignore[union-attr]
     stderr_tail.start()
 
+    if cancel_event is not None and cancel_event.is_set():
+        proc.kill()
+        raise SummaryError("Resumen cancelado por el usuario.")
     try:
         proc.stdin.write(build_prompt(path).encode("utf-8"))
         proc.stdin.close()
@@ -237,6 +251,8 @@ def summarize(
         proc.kill()
         done.wait(timeout=10)
         raise SummaryError(f"El resumen tardo mas de {timeout_s:.0f} s y fue cancelado.")
+    if cancel_event is not None and cancel_event.is_set():
+        raise SummaryError("Resumen cancelado por el usuario.")
     reader.join(timeout=10)
     stderr_tail.join(timeout=10)
     code = proc.wait()
