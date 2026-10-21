@@ -33,7 +33,7 @@
 #>
 param(
     [string]$Out,
-    [int]$IntervalMs = 400,
+    [int]$IntervalMs = 250,
     [int]$CaptionsPid = 0,
     [switch]$Dump,
     [switch]$Quiet
@@ -159,6 +159,7 @@ if (-not $Quiet) {
 $consumed = New-Object System.Collections.Generic.List[string]
 $emitted = 0
 $startedAt = Get-Date
+$lastTail = $null
 
 try {
     while ($true) {
@@ -179,6 +180,16 @@ try {
             $consumed.Add($line)
             $emitted++
             while ($consumed.Count -gt 200) { $consumed.RemoveAt(0) }
+        }
+
+        # Live tail: the still-growing last line goes to stdout only, never to
+        # the file, so the app can show speech the moment it is heard.
+        if ($lines.Count -gt 0) {
+            $tail = $lines[$lines.Count - 1]
+            if ($tail -and -not $consumed.Contains($tail) -and $tail -ne $lastTail) {
+                $lastTail = $tail
+                if (-not $Quiet) { Write-Output ('> ' + $tail) }
+            }
         }
 
         Start-Sleep -Milliseconds $IntervalMs

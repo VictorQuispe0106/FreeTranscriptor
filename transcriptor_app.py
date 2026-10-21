@@ -78,10 +78,11 @@ def launch_livecaptions(timeout_s: float = 15.0) -> int | None:
 class WatcherSession:
     """One transcription run: a hidden PowerShell watcher + its transcript path."""
 
-    def __init__(self, on_line, on_status, on_error) -> None:
+    def __init__(self, on_line, on_status, on_error, on_tail=None) -> None:
         self.on_line = on_line
         self.on_status = on_status
         self.on_error = on_error
+        self.on_tail = on_tail
         self.proc: subprocess.Popen | None = None
         self.out_path = ""
         self.started_at = 0.0
@@ -106,6 +107,11 @@ class WatcherSession:
         for raw in proc.stdout:  # type: ignore[union-attr]
             line = raw.rstrip("\r\n")
             if not line:
+                continue
+            # '> growing tail' -> the caption that is still being typed.
+            if line.startswith("> "):
+                if self.on_tail:
+                    self.on_tail(line[2:])
                 continue
             # '- **[hh:mm:ss]** text' -> show the text
             self.lines_since_stop += 1
@@ -141,6 +147,7 @@ class App(ttk.Frame):
         self.session: WatcherSession | None = None
         self.last_transcript = ""
         self.summary_cancel: threading.Event | None = None
+        self.tail_active = False
         self.status_var = tk.StringVar(value="Listo.")
         self._build()
         self.pack(fill="both", expand=True)
@@ -223,7 +230,7 @@ class App(ttk.Frame):
 
         def do_start() -> None:
             session = WatcherSession(self._on_line, lambda s: self.status_var.set(s),
-                                     self._on_error)
+                                     self._on_error, self._on_tail)
             session.start()
             self.session = session
             self.btn_stop.configure(state="normal")
@@ -337,12 +344,31 @@ class App(ttk.Frame):
 
     # --- callbacks ------------------------------------------------------ #
 
+    def _remove_last_line(self) -> None:
+        """Delete the last real text line, keeping the widget's trailing newline."""
+        last = int(self.lines.index("end-1c").split(".")[0])
+        self.lines.delete(f"{max(last - 1, 1)}.0", "end-1c")
+
     def _on_line(self, text: str) -> None:
         stamp = datetime.now().strftime("%H:%M:%S")
         self.lines.configure(state="normal")
+        if self.tail_active:
+            self._remove_last_line()
+            self.tail_active = False
         self.lines.insert("end", f"[{stamp}] {text}\n")
         self.lines.see("end")
         self.lines.configure(state="disabled")
+
+    def _on_tail(self, text: str) -> None:
+        """Replace the growing caption line in place, the moment it is heard."""
+        stamp = datetime.now().strftime("%H:%M:%S")
+        self.lines.configure(state="normal")
+        if self.tail_active:
+            self._remove_last_line()
+        self.lines.insert("end", f"[{stamp}] \u25b8 {text}\n")
+        self.lines.see("end")
+        self.lines.configure(state="disabled")
+        self.tail_active = True
 
     def _append_line(self, text: str) -> None:
         if not text:
