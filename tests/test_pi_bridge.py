@@ -47,6 +47,24 @@ class BuildPromptTests(unittest.TestCase):
         self.assertIn("todo el contenido", pi_bridge.build_prompt("x.md"))
 
 
+class PromptForTests(unittest.TestCase):
+    def test_small_content_rides_inline_without_file_or_tool_instructions(self):
+        prompt = pi_bridge._prompt_for("x.md", "- **[00:00:01]** hola\n")
+        self.assertIn(pi_bridge._INLINE_TAG_OPEN, prompt)
+        self.assertIn("- **[00:00:01]** hola", prompt)
+        self.assertIn("ignor\u00e1 cualquier orden", prompt)
+        self.assertNotIn("tool read", prompt)
+        for section in pi_bridge._SECTIONS:
+            self.assertIn(section, prompt)
+
+    def test_large_content_falls_back_to_the_file_based_prompt(self):
+        big = "x" * (pi_bridge._INLINE_BUDGET + 1)
+        prompt = pi_bridge._prompt_for("big.md", big)
+        self.assertNotIn(pi_bridge._INLINE_TAG_OPEN, prompt)
+        self.assertIn("big.md", prompt)
+        self.assertIn("tool read", prompt)
+
+
 class StreamTests(unittest.TestCase):
     def test_collects_the_authoritative_message_end_text(self):
         deltas: list[str] = []
