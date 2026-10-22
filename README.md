@@ -201,7 +201,9 @@ o `tiny` la reduce a costa de precisión.
 
 ### Acentos raros en la consola
 
-El script reconfigura la salida a UTF-8 y el `.md` siempre se escribe en UTF-8. Si ves
+El script reconfigura la salida a UTF-8 y el `.md` siempre se escribe en UTF-8, así que tanto el
+archivo como la ventana de la app muestran los acentos correctos (desde `15f4f88`, el stdout del
+watcher se fija en UTF-8; antes la ventana mostraba `�` porque PowerShell 5.1 emite el OEM). Si ves
 caracteres rotos en otra herramienta, abrí el `.md` como UTF-8.
 
 ## Verificado
