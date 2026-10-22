@@ -137,10 +137,18 @@ $Out = [System.IO.Path]::GetFullPath($Out)
 $directory = [System.IO.Path]::GetDirectoryName($Out)
 if (-not (Test-Path $directory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
 
-$window = Get-CaptionsWindow -TargetPid $CaptionsPid
-if (-not $window) {
-    Write-Error 'Live Captions is not running. Start it with Win+Ctrl+L, join the meeting, then rerun.'
-    exit 1
+$window = $null
+$waitTicks = 0
+while (-not $window) {
+    $window = Get-CaptionsWindow -TargetPid $CaptionsPid
+    if ($window) { break }
+    # The process may exist before its UIA window is ready: wait, bounded.
+    $waitTicks++
+    if ($waitTicks -gt 20) {
+        Write-Error 'Live Captions is not running. Start it with Win+Ctrl+L, join the meeting, then rerun.'
+        exit 1
+    }
+    Start-Sleep -Milliseconds 500
 }
 
 # A restart (the app offers this when the watcher dies) appends to the same

@@ -18,6 +18,7 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import unittest.mock
 
@@ -26,6 +27,8 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 web_gui = importlib.import_module("web_gui")
+transcriptor_app = importlib.import_module("transcriptor_app")
+pi_bridge = importlib.import_module("pi_bridge")
 
 
 def _free_port() -> int:
@@ -218,6 +221,75 @@ class TestPostActions(WebGuiServerTestCase):
         payload = json.loads(body)
         self.assertFalse(payload.get("ok"))
         self.assertIn("no", payload.get("error", "") + payload.get("error", ""))
+
+
+class TestStartLaunchesCaptions(unittest.TestCase):
+    """S2/web: clicking Transcribir MUST launch and pin Live Captions first.
+
+    Regression for the user-reported watcher error: the web Orchestrator
+    spawned the watcher without launching Live Captions, so the watcher's
+    startup check failed with exit 1 whenever none was already running, and
+    the Reanudar button re-failed forever.
+    """
+
+    def setUp(self) -> None:
+        import web_gui
+
+        self.web_gui = web_gui
+        self.hub = web_gui.Hub()
+        self.events: list[dict] = []
+
+        def fake_publish(self_event, event: dict) -> None:
+            self.events.append(event)
+
+        self._hub_restore = _Restore(web_gui.Hub, publish=fake_publish)
+        self._hub_restore.__enter__()
+        self._pi_restore = _Restore(pi_bridge, available=lambda: True)
+        self._pi_restore.__enter__()
+
+    def tearDown(self) -> None:
+        self._pi_restore.__exit__()
+        self._hub_restore.__exit__()
+
+    def test_start_launches_captions_and_pins_pid(self) -> None:
+        recorded: dict[str, object] = {}
+
+        class FakeProc:
+            stdout = []
+            stderr = None
+            poll = lambda self: 0
+            wait = lambda self, timeout=None: 0
+            terminate = lambda self: None
+            kill = lambda self: None
+
+        def fake_popen(cmd, *args, **kwargs):
+            recorded["cmd"] = cmd
+            return FakeProc()
+
+        with _Restore(transcriptor_app.subprocess, Popen=fake_popen):
+            with _Restore(self.web_gui, launch_livecaptions=lambda: 4321):
+                orch = self.web_gui.Orchestrator(self.hub)
+                self.assertEqual(orch.start(), "")
+                deadline = time.monotonic() + 5
+                while orch.session is None and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                orch.session.stop()
+                orch.session = None
+        self.assertIsNotNone(recorded.get("cmd"))
+        cmd = recorded["cmd"]
+        self.assertIn("-CaptionsPid", cmd)
+        self.assertEqual(cmd[cmd.index("-CaptionsPid") + 1], "4321")
+
+    def test_start_without_captions_publishes_failure_and_no_session(self) -> None:
+        with _Restore(self.web_gui, launch_livecaptions=lambda: None):
+            orch = self.web_gui.Orchestrator(self.hub)
+            self.assertEqual(orch.start(), "")
+            deadline = time.monotonic() + 5
+            while orch.session is not None and time.monotonic() < deadline:
+                time.sleep(0.05)
+        self.assertIsNone(orch.session)
+        types = [e.get("type") for e in self.events]
+        self.assertIn("watcherLost", types)
 
 
 if __name__ == "__main__":

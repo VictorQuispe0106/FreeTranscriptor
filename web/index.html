@@ -385,8 +385,8 @@
 
   // A confirmed line turns the growing tail into a normal grouped row.
   function finalizeTail() {
-    var last = lines.lastChild;
-    if (!last || last.dataset.provisional !== "1") return;
+    var last = lines.lastElementChild;
+    if (!last || !last.dataset || last.dataset.provisional !== "1") return;
     lines.replaceChild(buildRow(
       last.firstChild.textContent.replace(/\[|\]/g, ""),
       last.lastChild.textContent, false), last);
@@ -532,8 +532,11 @@
       $("footer-status").textContent = st.status;
     }
     // Recording controls mirror the orchestrator session state.
-    $("btn-start").disabled = !!st.transcribing;
+    $("btn-start").disabled = !!st.transcribing || !!st.starting;
     $("btn-stop").disabled = !st.transcribing;
+    if (st.starting) {
+      $("footer-status").textContent = "Abriendo Subtitulos en vivo...";
+    }
     // Without Pi the summary buttons are inert.
     var pi = st.piAvailable !== false;
     ["btn-summary", "btn-summary-live", "btn-history-resume"].forEach(
@@ -576,8 +579,8 @@
       }
       case "tail": {
         if (data.text) {
-          var tailTail = lines.lastChild;
-          var provisional = tailTail &&
+          var tailTail = lines.lastElementChild;
+          var provisional = tailTail && tailTail.dataset &&
             tailTail.dataset.provisional === "1";
           if (provisional) {
             tailTail.lastChild.textContent = data.text;
@@ -680,6 +683,9 @@
   // --- bootstrap ----------------------------------------------------------- //
 
   document.addEventListener("DOMContentLoaded", function () {
+    // Drop template whitespace text nodes: rows append dynamically.
+    $("lines").textContent = "";
+    $("summary-log").textContent = "";
     wireAction("btn-start", "start");
     wireAction("btn-stop", "stop");
     wireAction("btn-summary", "summary", true);

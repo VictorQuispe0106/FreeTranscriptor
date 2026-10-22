@@ -77,6 +77,7 @@ class Orchestrator:
         self.last_transcript = ""
         self.summary_cancel: threading.Event | None = None
         self.status = "Listo."
+        self.starting = False
         self.history: list[tuple[str, str]] = list_transcripts(TRANSCRIPTS_DIR)
 
     # --- events ---------------------------------------------------------- #
@@ -118,18 +119,44 @@ class Orchestrator:
 
     def start(self, resume: bool = False) -> str:
         with self.lock:
-            if self.session:
+            if self.session or self.starting:
                 return "Ya hay una transcripción corriendo."
-            if resume and self.last_transcript:
-                self.session = self._make_session(
-                    out_path=self.last_transcript)
-            else:
-                self.session = self._make_session()
-            self.last_transcript = self.session.out_path
-        self.publish_status("Transcribiendo...")
-        self.publish_state()
-        self.refresh_history()
+            self.starting = True
+        self.hub.publish({"type": "state", "transcribing": False,
+                          "summaryRunning": self.summary_cancel is not None,
+                          "piAvailable": pi_bridge.available(),
+                          "starting": True})
+        self.hub.publish({"type": "status", "text": "Abriendo Subtitulos en vivo..."})
+        threading.Thread(target=self._start_worker, args=(resume,),
+                         daemon=True).start()
         return ""
+
+    def _start_worker(self, resume: bool) -> None:
+        try:
+            # Launch and PIN the exact Live Captions instance, like the
+            # tkinter app does; without this the watcher's startup check
+            # fails with exit 1 whenever none was already running.
+            pid = launch_livecaptions() or 0
+            if not pid:
+                self.hub.publish({
+                    "type": "watcherLost",
+                    "message": "No se pudo abrir Live Captions "
+                               "(Subtitulos en directo)."})
+                self.publish_state()
+                return
+            out_path = (self.last_transcript
+                        if resume and self.last_transcript else "")
+            session = self._make_session(out_path=out_path, captions_pid=pid)
+            with self.lock:
+                self.session = session
+                self.last_transcript = session.out_path
+            self.publish_status("Transcribiendo...")
+            self.publish_state()
+            self.refresh_history()
+        finally:
+            with self.lock:
+                self.starting = False
+            self.publish_state()
 
     def stop(self) -> str:
         with self.lock:
@@ -261,6 +288,9 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200, fh.read(), "text/html; charset=utf-8")
             except OSError:
                 self._json({"error": "index.html no encontrado"}, 500)
+            return
+        if path == "/favicon.ico":
+            self._send(204, b"", "image/x-icon")
             return
         if path == "/api/state":
             orch = self.orchestrator
