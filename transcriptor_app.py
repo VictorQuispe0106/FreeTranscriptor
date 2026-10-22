@@ -133,12 +133,21 @@ class WatcherSession:
         self.lines_since_stop = 0
         self.stopped = False
 
-    def start(self) -> None:
-        stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
-        self.out_path = os.path.join(TRANSCRIPTS_DIR, f"{stamp}_live-captions.md")
+    def start(self, out_path: str = "", captions_pid: int = 0) -> None:
+        # CaptionsPid (S5): read only the exact LaunchCaptions.exe instance the
+        # app launched, never leave the left-over instance of an old session.
+        # out_path (S6): set when restarting after a dead watcher, so the run
+        # continues appending to the file that was already being written.
+        if out_path:
+            self.out_path = out_path
+        else:
+            stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            os.makedirs(TRANSCRIPTS_DIR, exist_ok=True)
+            self.out_path = os.path.join(TRANSCRIPTS_DIR, f"{stamp}_live-captions.md")
         cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
                "-File", WATCHER, "-Out", self.out_path]
+        if captions_pid > 0:
+            cmd += ["-CaptionsPid", str(captions_pid)]
         self.proc = subprocess.Popen(
             cmd, cwd=PROJECT_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1, close_fds=True, creationflags=0x08000000,
@@ -349,7 +358,7 @@ class App(ttk.Frame):
         def do_start() -> None:
             session = WatcherSession(self._on_line, lambda s: self.status_var.set(s),
                                      self._on_error, self._on_tail)
-            session.start()
+            session.start(captions_pid=pid or 0)
             self.session = session
             self.btn_stop.configure(state="normal")
             self.btn_open.configure(state="normal")
@@ -521,6 +530,35 @@ class App(ttk.Frame):
 
     def _on_error(self, message: str) -> None:
         self.status_var.set(f"Atencion: {message}")
+        # S6: the watcher died in the middle of a run (captions window closed,
+        # UIA lost). Offer to continue the same file instead of losing the run.
+        if self.session is not None and self.last_transcript and os.path.exists(self.last_transcript):
+            self.session = None
+            self.root.after(0, self._offer_restart, message)
+
+    def _offer_restart(self, message: str) -> None:
+        if messagebox.askyesno(
+                "Transcriptor en vivo",
+                f"La transcripcion se corto: {message}\n\n"
+                "Reiniciarla en el mismo archivo de transcript?"):
+            threading.Thread(target=self._restart_worker, daemon=True).start()
+        else:
+            self._reset_ui()
+
+    def _restart_worker(self) -> None:
+        self.status_var.set("Reabriendo Subtitulos en vivo...")
+        pid = launch_livecaptions() or 0
+
+        def do_restart() -> None:
+            session = WatcherSession(self._on_line, lambda s: self.status_var.set(s),
+                                     self._on_error, self._on_tail)
+            session.start(out_path=self.last_transcript, captions_pid=pid)
+            self.session = session
+            self.btn_stop.configure(state="normal")
+            self.btn_start.configure(state="disabled")
+            self.status_var.set("Transcribiendo (mismo archivo)...")
+
+        self.root.after(0, do_restart)
 
     def _reset_ui(self) -> None:
         self.session = None

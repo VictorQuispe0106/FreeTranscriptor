@@ -66,6 +66,91 @@ class AtEndTests(unittest.TestCase):
         self.assertFalse(at_end(0.0, 0.0))
 
 
+class WatcherSessionStartTests(unittest.TestCase):
+    """S5/S6: the watcher process is spawned with the exact pinned options."""
+
+    def _spawn_capture(self):
+        import transcriptor_app
+
+        recorded = {}
+
+        class FakeProc:
+            stdout = []
+            stderr = None
+            poll = lambda self: 0
+            wait = lambda self, timeout=None: 0
+            terminate = lambda self: None
+            kill = lambda self: None
+
+        original = transcriptor_app.subprocess.Popen
+
+        def fake(cmd, *args, **kwargs):
+            recorded["cmd"] = cmd
+            return FakeProc()
+
+        transcriptor_app.subprocess.Popen = fake
+        try:
+            session = transcriptor_app.WatcherSession(
+                lambda text: None, lambda status: None, lambda message: None)
+            session.start(out_path="\\somewhere\\out.md", captions_pid=1234)
+            session.stop()
+        finally:
+            transcriptor_app.subprocess.Popen = original
+        return session, recorded["cmd"]
+
+    def test_custom_out_path_is_used(self):
+        session, cmd = self._spawn_capture()
+        self.assertEqual(session.out_path, "\\somewhere\\out.md")
+        self.assertIn("-Out", cmd)
+        self.assertIn("\\somewhere\\out.md", cmd)
+
+    def test_pinned_pid_is_forwarded(self):
+        _session, cmd = self._spawn_capture()
+        self.assertIn("-CaptionsPid", cmd)
+        self.assertEqual(cmd[cmd.index("-CaptionsPid") + 1], "1234")
+
+    def test_no_pin_when_pid_unknown(self):
+        import transcriptor_app
+
+        recorded = {}
+
+        class FakeProc:
+            stdout = []
+            stderr = None
+            poll = lambda self: 0
+            wait = lambda self, timeout=None: 0
+            terminate = lambda self: None
+            kill = lambda self: None
+
+        original = transcriptor_app.subprocess.Popen
+
+        def fake(cmd, *args, **kwargs):
+            recorded["cmd"] = cmd
+            return FakeProc()
+
+        transcriptor_app.subprocess.Popen = fake
+        try:
+            session = transcriptor_app.WatcherSession(
+                lambda text: None, lambda status: None, lambda message: None)
+            session.start(captions_pid=0)
+            session.stop()
+        finally:
+            transcriptor_app.subprocess.Popen = original
+        self.assertNotIn("-CaptionsPid", recorded["cmd"])
+
+
+class WallClockStampTests(unittest.TestCase):
+    """S4: the parser keeps lines stamped with real time, not elapsed time."""
+
+    def test_wall_clock_stamp_survives_a_full_round_trip(self):
+        from transcript_lines import parse_markdown
+
+        lines = parse_markdown("- **[14:03:12]** La entrega es el jueves.\n")
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0].t, "14:03:12")
+        self.assertEqual(lines[0].text, "La entrega es el jueves.")
+
+
 class TranscriptCopyTests(unittest.TestCase):
     """S3: copy puts exactly the displayed meeting text on the clipboard."""
 

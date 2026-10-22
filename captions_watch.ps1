@@ -143,7 +143,9 @@ if (-not $window) {
     exit 1
 }
 
-$header = @(
+# A restart (the app offers this when the watcher dies) appends to the same
+# file: the header is written only for a new transcript.
+$headerLines = @(
     ('# Transcript en vivo ' + $EmDash + ' ' + (Get-Date -Format 'yyyy-MM-dd HH:mm')),
     '',
     '- **Fuente**: Windows Live Captions (UI Automation)',
@@ -152,7 +154,25 @@ $header = @(
     '---',
     ''
 )
-[System.IO.File]::WriteAllText($Out, ($header -join "`n") + "`n", $Utf8)
+$appendMode = (Test-Path $Out) -and ((Get-Item $Out).Length -gt 0)
+if (-not $appendMode) {
+    [System.IO.File]::WriteAllText($Out, ($headerLines -join "`n") + "`n", $Utf8)
+}
+
+$consumed = New-Object System.Collections.Generic.List[string]
+if ($appendMode) {
+    # Seed the dedupe buffer from what the file already holds, so the first
+    # reading of the restarted watcher does not re-emit the settled tail.
+    Get-Content -LiteralPath $Out | ForEach-Object {
+        if ($_ -match '^- \*\*\[[0-9:.,]+\]\*\* (.*)$') { [void]$consumed.Add($Matches[1]) }
+    }
+    while ($consumed.Count -gt 200) { $consumed.RemoveAt(0) }
+    if (-not $Quiet) { Write-Host ('resume  : ' + $consumed.Count + ' line(s) already on file') }
+}
+elseif (-not $Quiet) {
+    Write-Host 'source : Windows Live Captions (UI Automation)'
+    Write-Host ('output : ' + $Out)
+}
 
 if (-not $Quiet) {
     Write-Host 'source : Windows Live Captions (UI Automation)'
@@ -160,10 +180,9 @@ if (-not $Quiet) {
     Write-Host "reading - Ctrl+C to stop`n"
 }
 
-$consumed = New-Object System.Collections.Generic.List[string]
 $emitted = 0
-$startedAt = Get-Date
 $lastTail = $null
+$misses = 0
 
 try {
     while ($true) {
@@ -176,9 +195,22 @@ try {
             $lines = @()
         }
 
+        if ($lines.Count) { $misses = 0 }
+        else {
+            # The window disappeared (closed, crashed, pin removed): after a
+            # bounded number of empty reads, die so the app can offer a
+            # restart instead of spinning silently forever.
+            $misses++
+            if ($misses -gt 60) {
+                Write-Error 'Live Captions window lost - stopping (app may restart).'
+                exit 2
+            }
+        }
+
         foreach ($line in (Get-NewLines -Consumed $consumed.ToArray() -Lines $lines)) {
-            $elapsed = (Get-Date) - $startedAt
-            $text = '- **[{0:hh\:mm\:ss}]** {1}' -f $elapsed, $line
+            # S4: the wall-clock stamp, not elapsed time, so the first batch
+            # carries the real time instead of a burst of 00:00:00.
+            $text = '- **[{0:HH\:mm\:ss}]** {1}' -f (Get-Date), $line
             [System.IO.File]::AppendAllText($Out, $text + "`n", $Utf8)
             if (-not $Quiet) { Write-Host $text }
             $consumed.Add($line)
