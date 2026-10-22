@@ -51,3 +51,11 @@ Pi) no se toca; el tkinter queda como front alternativo.
   diseño Stitch como front adicional, tkinter no se borra.
 - **L3** Respuesta técnica dada y aceptada: latencia con SSE ≈ tkinter (30-80 ms extra),
   el cuello de botella es Live Captions (250 ms de UIA), no la GUI.
+- **L4** (usuario): «bro me sale un error del wacher, podrias probar con playwrigth o
+  otra cosa que te ayude a testearlo primero» → reproducido con Playwright (Edge
+  headless) manejando la UI real: el Orchestrator web no lanzaba Live Captions
+  (watcher exit 1 en el check de arranque) + crash JS en la fila provisional.
+- **L5** Fix `8fb68aa`: arranque async con lanzamiento+PID (paridad tkinter), watcher
+  espera acotada por la ventana UIA, JS null-safe (lastElementChild + dataset),
+  favicon 204. Playwright end-to-end: Abriendo -> Transcribiendo -> líneas -> stop
+  limpio, cero errores de consola. Suite 69 green.
