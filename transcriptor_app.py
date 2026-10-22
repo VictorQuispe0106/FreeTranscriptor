@@ -43,6 +43,18 @@ LIVE_CAPTURES = os.path.join(os.environ.get("WINDIR", r"C:\\Windows"),
 _DECODE = dict(encoding="utf-8", errors="replace")
 _HISTORY_SUFFIX = "_live-captions.md"
 
+# Visual identity taken from the Stitch DESKTOP design (feature T10).
+PALETTE = {
+    "bg": "#0d1117",        # near-black app background
+    "panel": "#131a21",     # cards, text areas, button faces
+    "border": "#22303a",    # hairline borders
+    "accent": "#2dd4bf",    # luminous teal (primary)
+    "accent_text": "#06251f",  # text on accent fills
+    "text": "#d7e2ea",      # main foreground
+    "muted": "#7d8fa0",     # secondary text, inactive tabs
+    "tab_active": "#1b2a30",
+}
+
 
 def list_transcripts(directory: str) -> list[tuple[str, str]]:
     """Session transcripts in a transcript directory, newest first.
@@ -196,6 +208,7 @@ class App(ttk.Frame):
         self.root = root
         root.title("Transcriptor en vivo")
         root.minsize(560, 380)
+        self._apply_theme(root)
 
         self.session: WatcherSession | None = None
         self.last_transcript = ""
@@ -208,6 +221,48 @@ class App(ttk.Frame):
         root.protocol("WM_DELETE_WINDOW", self._on_close)
         root.after(400, self._keep_status_time)
 
+    def _apply_theme(self, root: tk.Tk) -> None:
+        """T10: stitch-derived dark identity; static config, zero per-line cost."""
+        p = PALETTE
+        root.configure(bg=p["bg"])
+        root.option_add("*TCombobox*Listbox.background", p["panel"])
+        root.option_add("*TCombobox*Listbox.foreground", p["text"])
+        root.option_add("*TCombobox*Listbox.selectBackground", p["tab_active"])
+        root.option_add("*TCombobox*Listbox.selectForeground", p["accent"])
+        style = ttk.Style(root)
+        try:
+            style.theme_use("clam")  # honors border/background config on Windows
+        except tk.TclError:
+            pass
+        style.configure(".", background=p["bg"], foreground=p["text"],
+                        font=("Segoe UI", 9))
+        style.configure("TFrame", background=p["bg"])
+        style.configure("TLabel", background=p["bg"], foreground=p["text"])
+        style.configure("Muted.TLabel", background=p["bg"], foreground=p["muted"])
+        style.configure("TButton", background=p["panel"], foreground=p["text"],
+                        bordercolor=p["border"], focuscolor=p["accent"],
+                        padding=(8, 3))
+        style.map("TButton",
+                  background=[("active", p["tab_active"]), ("disabled", p["bg"])],
+                  foreground=[("disabled", p["muted"])])
+        style.configure("Accent.TButton", background=p["accent"],
+                        foreground=p["accent_text"], bordercolor=p["accent"])
+        style.map("Accent.TButton",
+                  background=[("active", "#39e0cb"), ("disabled", p["panel"])],
+                  foreground=[("disabled", p["muted"])])
+        style.configure("TNotebook", background=p["bg"], bordercolor=p["border"])
+        style.configure("TNotebook.Tab", background=p["panel"], foreground=p["muted"],
+                        padding=(10, 3))
+        style.map("TNotebook.Tab",
+                  background=[("selected", p["tab_active"])],
+                  foreground=[("selected", p["accent"])])
+        style.configure("TCombobox", fieldbackground=p["panel"], background=p["panel"],
+                        foreground=p["text"], arrowcolor=p["accent"],
+                        bordercolor=p["border"])
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", p["panel"])],
+                  foreground=[("readonly", p["text"])])
+
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
         self.rowconfigure(3, weight=1)
@@ -215,11 +270,13 @@ class App(ttk.Frame):
         ttk.Label(
             self, text="Transcribe lo que se escucha por los parlantes "
                        "(Windows Live Captions). Abrilo antes de la reunion.",
-            wraplength=540).grid(column=0, row=0, sticky="ew", padx=12, pady=(12, 4))
+            wraplength=540, style="Muted.TLabel").grid(
+            column=0, row=0, sticky="ew", padx=12, pady=(12, 4))
 
         buttons = ttk.Frame(self)
         buttons.grid(column=0, row=1, sticky="ew", padx=12, pady=6)
-        self.btn_start = ttk.Button(buttons, text="Transcribir", command=self.start)
+        self.btn_start = ttk.Button(buttons, text="Transcribir", command=self.start,
+                                    style="Accent.TButton")
         self.btn_stop = ttk.Button(buttons, text="Parar", command=self.stop,
                                    state="disabled")
         self.btn_open = ttk.Button(buttons, text="Abrir transcript",
@@ -259,7 +316,8 @@ class App(ttk.Frame):
         # never to the running session.
         history = ttk.Frame(self)
         history.grid(column=0, row=4, sticky="ew", padx=12, pady=(2, 2))
-        ttk.Label(history, text="Historial:").pack(side="left", padx=(0, 4))
+        ttk.Label(history, text="Historial:", style="Muted.TLabel").pack(
+            side="left", padx=(0, 4))
         self.history_pick = ttk.Combobox(history, state="readonly", width=52)
         self.history_pick.pack(side="left", padx=(0, 8))
         self.history_pick.bind("<<ComboboxSelected>>", self._on_history_selected)
@@ -282,19 +340,30 @@ class App(ttk.Frame):
         sum_tab = ttk.Frame(notebook)
         notebook.add(trans_tab, text="Transcripción")
         notebook.add(sum_tab, text="Resumen (Pi)")
-        self.lines = tk.Text(trans_tab, height=14, wrap="word", state="disabled")
+        self.lines = tk.Text(
+            trans_tab, height=14, wrap="word", state="disabled",
+            bg=PALETTE["panel"], fg=PALETTE["text"], relief="flat", padx=8, pady=6,
+            insertbackground=PALETTE["accent"],
+            selectbackground=PALETTE["tab_active"], font=("Segoe UI", 10))
         self.lines.pack(side="left", fill="both", expand=True)
         scroll = ttk.Scrollbar(trans_tab, command=self.lines.yview)
         scroll.pack(side="right", fill="y")
         self.lines.configure(yscrollcommand=scroll.set)
-        self.summary_log = tk.Text(sum_tab, height=14, wrap="word", state="disabled")
+        # Timestamp in accent, growing tail muted — the Stitch chip look.
+        self.lines.tag_configure("stamp", foreground=PALETTE["accent"])
+        self.lines.tag_configure("tail", foreground=PALETTE["muted"])
+        self.summary_log = tk.Text(
+            sum_tab, height=14, wrap="word", state="disabled",
+            bg=PALETTE["panel"], fg=PALETTE["text"], relief="flat", padx=8, pady=6,
+            insertbackground=PALETTE["accent"], font=("Segoe UI", 10))
         self.summary_log.pack(side="left", fill="both", expand=True)
         sum_scroll = ttk.Scrollbar(sum_tab, command=self.summary_log.yview)
         sum_scroll.pack(side="right", fill="y")
         self.summary_log.configure(yscrollcommand=sum_scroll.set)
         self._notebook = notebook
 
-        status = ttk.Label(self, textvariable=self.status_var, anchor="w")
+        status = ttk.Label(self, textvariable=self.status_var, anchor="w",
+                           style="Muted.TLabel")
         status.grid(column=0, row=5, sticky="ew", padx=12, pady=(0, 10))
         self._refresh_history()
 
@@ -557,7 +626,8 @@ class App(ttk.Frame):
         if self.tail_active:
             self._remove_last_line()
             self.tail_active = False
-        self.lines.insert("end", f"[{stamp}] {text}\n")
+        self.lines.insert("end", f"[{stamp}] ", "stamp")
+        self.lines.insert("end", f"{text}\n")
         if follow:
             self.lines.see("end")
         self.lines.configure(state="disabled")
@@ -569,7 +639,8 @@ class App(ttk.Frame):
         self.lines.configure(state="normal")
         if self.tail_active:
             self._remove_last_line()
-        self.lines.insert("end", f"[{stamp}] \u25b8 {text}\n")
+        self.lines.insert("end", f"[{stamp}] ", "stamp")
+        self.lines.insert("end", f"\u25b8 {text}\n", "tail")
         if follow:
             self.lines.see("end")
         self.lines.configure(state="disabled")

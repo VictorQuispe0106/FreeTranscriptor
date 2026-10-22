@@ -168,5 +168,30 @@ class TranscriptCopyTests(unittest.TestCase):
         self.assertEqual(copyable_line("\n"), "")
 
 
+class ThemeTests(unittest.TestCase):
+    """T10: the Stitch visual identity is applied through ttk styles."""
+
+    def test_dark_theme_is_applied(self):
+        import tkinter as tk
+        import transcriptor_app
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            app_obj = transcriptor_app.App(root)
+            style = transcriptor_app.ttk.Style(root)
+            self.assertEqual(root.cget("bg"),
+                             transcriptor_app.PALETTE["bg"])
+            self.assertEqual(style.lookup("Accent.TButton", "background"),
+                             transcriptor_app.PALETTE["accent"])
+            self.assertEqual(self._text_bg(app_obj),
+                             transcriptor_app.PALETTE["panel"])
+        finally:
+            root.destroy()
+
+    def _text_bg(self, app_obj):
+        return app_obj.lines.cget("bg")
+
+
 if __name__ == "__main__":
     unittest.main()

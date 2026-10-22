@@ -40,7 +40,8 @@ Doble clic en **`Transcriptor App.bat`** (o `py transcriptor_app.py`).
 9. **Historial** - lista los `*_live-captions.md` anteriores de `transcripts\`; con
    **Abrir**, **TXT** y **Resumir** sobre el que elijas, sin salir de la app.
 
-Cada sesión guarda en `transcripts\<fecha>_live-captions.md`. Los timestamps del
+Cada sesión guarda en `transcripts\<fecha>_live-captions.md`. La ventana usa un tema
+oscuro (diseño generado con Stitch, paleta near-black + turquesa). Los timestamps del
 archivo son de **hora real** (reloj de pared), así que la primera tanda de líneas ya no
 sale como una ráfaga de `00:00:00`. Si la ventana de Subtítulos se cierra en plena
 reunión, la app lo detecta y ofrece **reiniciar en el mismo archivo** (sin duplicar

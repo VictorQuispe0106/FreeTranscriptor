@@ -25,6 +25,7 @@ fluidez actual de la app (nunca agregar overhead en el bucle de lectura).
 
 ## Tareas
 
+
 - **T1** (S1) Panel Historial en la GUI: lista + abrir + exportar TXT + resumir el elegido. Route: inline. Commit: P1.
 - **T2** (S2, S9) Autoscroll solo al fondo: VAT-only in `_on_line`/`_on_tail`. Route: inline. Commit: P1.
 - **T3** (S3) Copiar transcript / copiar resumen. Route: inline. Commit: P1.
@@ -34,6 +35,8 @@ fluidez actual de la app (nunca agregar overhead en el bucle de lectura).
 - **T7** (S7) Zona de resumen separada. Route: inline. Commit: P3.
 - **T8** (S8) Botón «Resumir hasta ahora» sin cortar la transcripción. Route: inline. Commit: P3.
 - **T9** (S1-S9) Verificación: suite de tests (pytest tests/) + corrida real de la app. Route: inline. Commit: P3.
+- **T10** (Decisión L5) Tema visual del app según diseño Stitch (DESKTOP): paleta oscura,
+  tipografía y espaciado por ttk.Style; sin cambiar nada de comportamiento. Route: inline. Commit: P4.
 
 Commits: P1 usabilidad, P2 watcher/timestamps/robustez, P3 resumen + verificación,
 ~rebanadas reviewables. C1^ nunca en default branch: branch `feature/transcriptor-mejoras`.
@@ -70,3 +73,6 @@ Commits: P1 usabilidad, P2 watcher/timestamps/robustez, P3 resumen + verificaci�
 - **L4** Incidente entorno: bash.exe de la sesión de Pi roto (Git Local sin
   usr\bin\bash.exe). settings.json de Pi reapuntado a `C:\Program Files\Git\bin\bash.exe`;
   requiere /reload. Mientras tanto se avanza con lo no requerido de comandos.
+- **L5** (usuario): «Bro podrias mejorar la interfaz con stitch?» → decisión tomada en el
+  cuadro: *Diseño + tema tkinter* (Stitch genera la pantalla DESKTOP y la identidad se
+  aplica al tkinter con ttk.Style; sin reescritura web).",
