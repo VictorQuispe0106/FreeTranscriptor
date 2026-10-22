@@ -48,6 +48,23 @@ reunión, la app lo detecta y ofrece **reiniciar en el mismo archivo** (sin dupl
 líneas). La app tampoco lee otra instancia vieja de Live Captions: fija el PID de la
 que abrió.
 
+## App web (diseño Stitch, nuevo)
+
+Mismo motor, misma pipeline: solo cambia la piel. Doble clic en **`Transcriptor Web.bat`
+** — levanta un servidor local (`web_gui.py`) en `http://127.0.0.1:8737` y abre el
+navegador solo. Todo lo que hace la app tkinter lo hace acá, **más fluido**: el
+transcript se renderiza con el HTML de Stitch tal cual (el look exacto del diseño),
+con pestañas **Transcripción / Resumen (Pi)**, historial con selector, filtro de
+palabras en vivo y banner de **Reanudar** si la ventana de Subtítulos se cae.
+
+- **Empuje real**: las líneas llegan por SSE apenas el watcher las emite (sin
+  polling del navegador; latencia ≈ tkinter).
+- **Solo escucha en 127.0.0.1**: no expone nada a la red.
+- **Sin dependencias nuevas**: `http.server` de la stdlib; el primer render carga
+  Tailwind/Google Fonts de CDN (con internet), el transcript sigue siendo 100% local.
+- Puerto configurable con la variable `TRANSCRIPTOR_PORT` (default 8737).
+- La app tkinter sigue funcionando igual: dos frentes, un mismo watcher.
+
 ## Resumen con IA (Pi local, sin API keys)
 
 **Resumir con Pi** manda el transcript al asistente Pi que ya tenés instalado y configurado
