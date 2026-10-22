@@ -41,6 +41,50 @@ LIVE_CAPTURES = os.path.join(os.environ.get("WINDIR", r"C:\\Windows"),
 # PowerShell 5.1 with a redirected stdout emits the OEM codepage; decode
 # defensively. The .md file is always written by the watcher as UTF-8.
 _DECODE = dict(encoding="utf-8", errors="replace")
+_HISTORY_SUFFIX = "_live-captions.md"
+
+
+def list_transcripts(directory: str) -> list[tuple[str, str]]:
+    """Session transcripts in a transcript directory, newest first.
+
+    Returns (name, full path) pairs for raw *_live-captions.md files only:
+    derived files (.limpio.md, .resumen.md), the .snapshots folder, other
+    directories and non-markdown files never enter the history.
+    """
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return []
+    found: list[tuple[str, str]] = []
+    for name in names:
+        if not name.endswith(_HISTORY_SUFFIX):
+            continue
+        full = os.path.join(directory, name)
+        if os.path.isfile(full):
+            found.append((name, full))
+
+    def mtime(pair: tuple[str, str]) -> float:
+        try:
+            return os.path.getmtime(pair[1])
+        except OSError:
+            return 0.0
+
+    found.sort(key=mtime, reverse=True)
+    return found
+
+
+def at_end(first: float, last: float) -> bool:
+    """True when a yview tuple says the widget bottom is on screen.
+
+    The transcript view only auto-follows the newest line when the reader
+    is already at the bottom; reading a previous line is never interrupted.
+    """
+    return last >= 0.999
+
+
+def copyable_line(block: str) -> str:
+    """The exact displayed text, minus the widget's trailing newline."""
+    return block.rstrip("\n")
 
 
 def livecaptions_running() -> int | None:
@@ -149,6 +193,7 @@ class App(ttk.Frame):
         self.summary_cancel: threading.Event | None = None
         self.tail_active = False
         self.status_var = tk.StringVar(value="Listo.")
+        self._history_map: dict[str, str] = {}
         self._build()
         self.pack(fill="both", expand=True)
         root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -172,26 +217,98 @@ class App(ttk.Frame):
                                    command=self.open_transcript, state="disabled")
         self.btn_export = ttk.Button(buttons, text="Exportar TXT",
                                      command=self.export_txt, state="disabled")
-        self.btn_summary = ttk.Button(buttons, text="Resumir con Pi",
-                                      command=self.run_summary, state="disabled")
-        self.btn_cancel = ttk.Button(buttons, text="Cancelar resumen",
-                                     command=self.cancel_summary, state="disabled")
+        self.btn_copy = ttk.Button(buttons, text="Copiar",
+                                   command=self.copy_transcript, state="disabled")
         self.btn_start.pack(side="left", padx=(0, 8))
         self.btn_stop.pack(side="left", padx=(0, 8))
         self.btn_open.pack(side="left", padx=(0, 8))
         self.btn_export.pack(side="left", padx=(0, 8))
-        self.btn_summary.pack(side="left", padx=(0, 8))
-        self.btn_cancel.pack(side="left")
+        self.btn_copy.pack(side="left")
         threading.Thread(target=self._probe_pi, daemon=True).start()
 
-        self.lines = tk.Text(self, height=14, wrap="word", state="disabled")
-        self.lines.grid(column=0, row=2, sticky="nsew", padx=12, pady=(4, 4))
-        scroll = ttk.Scrollbar(self, command=self.lines.yview)
-        scroll.grid(column=0, row=2, sticky="ens", padx=(0, 2))
+        # S1: session history row. Actions apply to the selected prior file,
+        # never to the running session.
+        history = ttk.Frame(self)
+        history.grid(column=0, row=3, sticky="ew", padx=12, pady=(2, 2))
+        ttk.Label(history, text="Historial:").pack(side="left", padx=(0, 4))
+        self.history_pick = ttk.Combobox(history, state="readonly", width=52)
+        self.history_pick.pack(side="left", padx=(0, 8))
+        self.history_pick.bind("<<ComboboxSelected>>", self._on_history_selected)
+        self.btn_hist_open = ttk.Button(history, text="Abrir",
+                                        command=self.open_history, state="disabled")
+        self.btn_hist_txt = ttk.Button(history, text="TXT",
+                                       command=self.export_history, state="disabled")
+        self.btn_hist_summary = ttk.Button(
+            history, text="Resumir",
+            command=lambda: self.run_summary(self._selected_history_path()),
+            state="disabled")
+        self.btn_hist_open.pack(side="left", padx=(0, 4))
+        self.btn_hist_txt.pack(side="left", padx=(0, 4))
+        self.btn_hist_summary.pack(side="left")
+
+        # S7: the transcript and the Pi summary never share one widget again.
+        notebook = ttk.Notebook(self)
+        notebook.grid(column=0, row=2, sticky="nsew", padx=12, pady=(4, 4))
+        trans_tab = ttk.Frame(notebook)
+        sum_tab = ttk.Frame(notebook)
+        notebook.add(trans_tab, text="Transcripción")
+        notebook.add(sum_tab, text="Resumen (Pi)")
+        self.lines = tk.Text(trans_tab, height=14, wrap="word", state="disabled")
+        self.lines.pack(side="left", fill="both", expand=True)
+        scroll = ttk.Scrollbar(trans_tab, command=self.lines.yview)
+        scroll.pack(side="right", fill="y")
         self.lines.configure(yscrollcommand=scroll.set)
+        self.summary_log = tk.Text(sum_tab, height=14, wrap="word", state="disabled")
+        self.summary_log.pack(side="left", fill="both", expand=True)
+        sum_scroll = ttk.Scrollbar(sum_tab, command=self.summary_log.yview)
+        sum_scroll.pack(side="right", fill="y")
+        self.summary_log.configure(yscrollcommand=sum_scroll.set)
+        self._notebook = notebook
 
         status = ttk.Label(self, textvariable=self.status_var, anchor="w")
-        status.grid(column=0, row=3, sticky="ew", padx=12, pady=(0, 10))
+        status.grid(column=0, row=4, sticky="ew", padx=12, pady=(0, 10))
+        self._refresh_history()
+
+    # --- history ---------------------------------------------------------
+
+    def _refresh_history(self) -> None:
+        pairs = list_transcripts(TRANSCRIPTS_DIR)
+        self._history_map = dict(pairs)
+        self.history_pick.configure(values=[name for name, _ in pairs])
+        current = self.history_pick.get()
+        if current not in self._history_map:
+            self.history_pick.set("")
+            for button in (self.btn_hist_open, self.btn_hist_txt,
+                           self.btn_hist_summary):
+                button.configure(state="disabled")
+
+    def _on_history_selected(self, _event: object = None) -> None:
+        if not self.history_pick.get():
+            return
+        for button in (self.btn_hist_open, self.btn_hist_txt,
+                       self.btn_hist_summary):
+            button.configure(state="normal")
+
+    def _selected_history_path(self) -> str:
+        return self._history_map.get(self.history_pick.get(), "")
+
+    def open_history(self) -> None:
+        path = self._selected_history_path()
+        if path:
+            os.startfile(path)  # noqa: S606 (local trusted path)
+
+    def export_history(self) -> None:
+        source = self._selected_history_path()
+        if not source:
+            return
+        try:
+            target = Path(source).with_suffix(".txt")
+            write_utf8(target, to_txt(read_markdown(source)))
+        except OSError as exc:
+            messagebox.showerror("Transcriptor en vivo",
+                                 f"No se pudo escribir el TXT: {exc}")
+            return
+        os.startfile(str(target))  # noqa: S606 (local trusted path)
 
     # --- pi probe --------------------------------------------------------- #
 
@@ -208,6 +325,7 @@ class App(ttk.Frame):
     def _remember_transcript(self, path: str) -> None:
         self.last_transcript = path
         self.btn_export.configure(state="normal")
+        self.btn_copy.configure(state="normal")
         if pi_bridge.available():
             self.btn_summary.configure(state="normal")
 
@@ -237,6 +355,7 @@ class App(ttk.Frame):
             self.btn_open.configure(state="normal")
             self.status_var.set("Transcribiendo...")
             self._remember_transcript(session.out_path)
+            self._refresh_history()
 
         self.root.after(0, do_start)
 
@@ -267,10 +386,10 @@ class App(ttk.Frame):
             return
         os.startfile(str(target))  # noqa: S606 (local trusted path)
 
-    def run_summary(self) -> None:
+    def run_summary(self, source: str | None = None) -> None:
         if self.summary_cancel:
             return
-        source = self.last_transcript
+        source = source or self.last_transcript
         if not source or not os.path.exists(source):
             messagebox.showinfo("Transcriptor en vivo",
                                 "Todavia no hay transcript para resumir.")
@@ -279,9 +398,20 @@ class App(ttk.Frame):
         self.btn_summary.configure(state="disabled")
         self.btn_start.configure(state="disabled")
         self.btn_cancel.configure(state="normal")
-        self._append_line("Resumiendo con Pi... (Cancelable)")
+        self._notebook.select(1)
+        self._summary_line("Resumiendo con Pi... (Cancelale)")
         threading.Thread(target=self._summary_worker, args=(source,),
                          daemon=True).start()
+
+    def copy_transcript(self) -> None:
+        block = self.lines.get("1.0", "end")
+        if not block.strip():
+            messagebox.showinfo("Transcriptor en vivo",
+                                "Todavia no hay texto que copiar.")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(copyable_line(block))
+        self.status_var.set("Transcript copiado al portapapeles.")
 
     def cancel_summary(self) -> None:
         if self.summary_cancel:
@@ -317,7 +447,7 @@ class App(ttk.Frame):
             write_utf8(derived["resumen"], render_resumen(stem, derived, summary,
                                                           len(polished)))
         except (pi_bridge.SummaryError, pi_bridge.PiUnavailable, OSError) as exc:
-            self.root.after(0, self._append_line, f"El resumen fallo: {exc}")
+            self.root.after(0, self._summary_line, f"El resumen fallo: {exc}")
         finally:
             done = self.summary_cancel is not None and cancel is self.summary_cancel
             self.summary_cancel = None
@@ -334,13 +464,21 @@ class App(ttk.Frame):
         target = derived["resumen"]
         if os.path.exists(target):
             self.status_var.set("Resumen listo.")
-            self._append_line(f"Resumen escrito en {target}")
+            self._summary_line(f"Resumen escrito en {target}")
             os.startfile(target)  # noqa: S606 (local trusted path)
         else:
             self.status_var.set("Resumen no generado (ver el log en la ventana).")
 
     def _on_summary_delta(self, delta: str) -> None:
-        self.root.after(0, self._append_line, delta.rstrip())
+        self.root.after(0, self._summary_line, delta.rstrip())
+
+    def _summary_line(self, text: str) -> None:
+        if not text:
+            return
+        self.summary_log.configure(state="normal")
+        self.summary_log.insert("end", f"{text}\n")
+        self.summary_log.see("end")
+        self.summary_log.configure(state="disabled")
 
     # --- callbacks ------------------------------------------------------ #
 
@@ -351,22 +489,28 @@ class App(ttk.Frame):
 
     def _on_line(self, text: str) -> None:
         stamp = datetime.now().strftime("%H:%M:%S")
+        # S2: only follow the newest line when the reader is already at the
+        # bottom; reading an earlier line is never interrupted by autoplay.
+        follow = at_end(*self.lines.yview())
         self.lines.configure(state="normal")
         if self.tail_active:
             self._remove_last_line()
             self.tail_active = False
         self.lines.insert("end", f"[{stamp}] {text}\n")
-        self.lines.see("end")
+        if follow:
+            self.lines.see("end")
         self.lines.configure(state="disabled")
 
     def _on_tail(self, text: str) -> None:
         """Replace the growing caption line in place, the moment it is heard."""
         stamp = datetime.now().strftime("%H:%M:%S")
+        follow = at_end(*self.lines.yview())
         self.lines.configure(state="normal")
         if self.tail_active:
             self._remove_last_line()
         self.lines.insert("end", f"[{stamp}] \u25b8 {text}\n")
-        self.lines.see("end")
+        if follow:
+            self.lines.see("end")
         self.lines.configure(state="disabled")
         self.tail_active = True
 
