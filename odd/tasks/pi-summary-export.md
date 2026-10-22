@@ -135,6 +135,19 @@ Correr los tests desde la raíz del proyecto:
 py -m unittest discover -s tests -t . -v
 ```
 
+## Estado final
+
+- **T1** ✓ commit `b363efe` — `transcript_lines.py` + `fluidez.py` + 36 tests (GREEN tras RED con 20 fallas).
+- **T2** ✓ commit `12292dd` — `pi_bridge.py` + 12 tests herméticos; smoke real 9.4 s (sintético) y 21.8 s
+  (transcript real de reunión); cancelación verificada vía watchdog (0.2 s, sin tokens).
+- **T3** ✓ commit `9addab1` — app con 6 botones, snapshot del crudo en `.snapshots/`, README actualizado.
+- **T4** ✓ suite: 48 tests OK (1 skip = smoke real bajo `PI_SMOKE=1`); app construida y cerrada sin errores
+  en headless (6 botones verificados en la toolbar).
+- **Evidencia extra**: pipeline aplicado al transcript real `2026-10-21_111159`: 13 líneas crudo ->
+  12 limpias con "activation date 21 / del 10." bien unidas (regla 4 sobre dato real).
+- **Nota (L7)**: la delegación a workers no estuvo disponible por el harness (no resuelve el doc de
+  feature fuera del workspace de la sesión); T1-T4 se ejecutaron inline respetando las mismas specs.
+
 ## Log
 
 - **L1** (pedido original, verbatim): «mejorame el proyecto de trancriptor»
