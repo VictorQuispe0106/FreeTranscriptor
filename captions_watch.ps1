@@ -40,6 +40,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Redirected stdout in PowerShell 5.1 defaults to the console OEM codepage;
+# Python decodes our stdout as UTF-8, so pin UTF-8 here or accents arrive
+# replaced with U+FFFD. Harmless for interactive use.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
