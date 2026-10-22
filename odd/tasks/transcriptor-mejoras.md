@@ -38,6 +38,27 @@ fluidez actual de la app (nunca agregar overhead en el bucle de lectura).
 Commits: P1 usabilidad, P2 watcher/timestamps/robustez, P3 resumen + verificación,
 ~rebanadas reviewables. C1^ nunca en default branch: branch `feature/transcriptor-mejoras`.
 
+## Estado final
+
+- **P1** commit `591b6e7` — S1 (Historial: listado `list_transcripts`, fila con combobox y
+  Abrir/TXT/Resumir), S2 (autoscroll solo al fondo, helper `at_end`), S3 parcial (Copiar
+  transcript). 56 tests green + smoke headless.
+- **P2** commit `757d437` — S4 (estampa hora real `HH:mm:ss` en el watcher), S5
+  (`-CaptionsPid` del PID que lanzó la app), S6 (watcher sale con `exit 2` si la ventana
+  desaparece tras ~15 s; header solo en archivo nuevo; seed de dedupe desde el archivo;
+  app ofrece reiniciar en el mismo archivo). 60 tests green + syntax-check del .ps1.
+- **P3** commit `7ddd956` — S7 (pestaña propia «Resumen (Pi)»), S8 («Resumir hasta
+  ahora» sin cortar la sesión, flag `live` end-to-end), S3 completo (Copiar resumen,
+  Copiar habilitado con transcript), README actualizado. Smoke+suite green.
+- **Verificación funcional (T9)** corrida real contra LiveCaptions: header correcto en
+  archivo nuevo; reinicio en el mismo archivo NO trunca ni duplica (`dupes=0`); muerte
+  por ventana perdida → `exit 2` en ~20 s. Corridas previas a la reunión real emitieron
+  5 líneas con dedupe 0.
+- **Aprendizaje nuevo**: con `$ErrorActionPreference='Stop'`, `Write-Error` mata el
+  proceso con exit 1 antes de llegar al `exit 2` — el mensaje va con `Write-Host`.
+- **Pendiente del usuario**: test de clic en una reunión real (Transcribir → líneas →
+  Resumir hasta ahora → Parar); mismo criterio que dejó pendiente la feature anterior.
+
 ## Log
 
 - **L1** (usuario, verbatim): «bro la app de transcripto esta fluido y funciona bien,
