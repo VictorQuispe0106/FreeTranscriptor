@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Transcriptor en vivo</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-surface-variant": "#b9cac2",
+            "on-background": "#dfe2eb",
+            "surface-dim": "#10141a",
+            "tertiary": "#c7ffeb",
+            "surface-container-highest": "#31353c",
+            "secondary-container": "#04b4a2",
+            "primary-fixed-dim": "#00e0b4",
+            "surface-variant": "#31353c",
+            "inverse-on-surface": "#2d3137",
+            "secondary-fixed-dim": "#4fdbc8",
+            "on-error": "#690005",
+            "secondary": "#4fdbc8",
+            "on-primary-fixed": "#002118",
+            "surface-tint": "#00e0b4",
+            "surface-bright": "#353940",
+            "error": "#ffb4ab",
+            "on-primary-fixed-variant": "#00513f",
+            "on-secondary": "#003731",
+            "on-primary-container": "#006a54",
+            "on-tertiary-fixed": "#002018",
+            "outline-variant": "#3a4a44",
+            "surface-container-low": "#181c22",
+            "inverse-primary": "#006b55",
+            "primary-container": "#00f2c3",
+            "inverse-surface": "#dfe2eb",
+            "primary-fixed": "#2effcf",
+            "surface-container-lowest": "#0a0e14",
+            "on-tertiary-fixed-variant": "#005140",
+            "tertiary-fixed-dim": "#2bdfb6",
+            "on-tertiary-container": "#006a54",
+            "on-error-container": "#ffdad6",
+            "secondary-fixed": "#71f8e4",
+            "on-secondary-container": "#003f38",
+            "outline": "#84948d",
+            "on-surface": "#dfe2eb",
+            "tertiary-container": "#47f0c6",
+            "on-secondary-fixed-variant": "#005048",
+            "on-secondary": "#00382b",
+            "surface": "#10141a",
+            "tertiary-fixed": "#57fcd2",
+            "error-container": "#93000a",
+            "primary": "#c5ffe9",
+            "surface-container": "#1c2026",
+            "surface-container-high": "#262a31",
+            "on-secondary-fixed-variant": "#005048",
+            "on-tertiary": "#00382b",
+            "background": "#10141a"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-xl": "1rem",
+            "space-lg": "0.75rem",
+            "space-sm": "0.375rem",
+            "space-xs": "0.25rem",
+            "gutter": "0.5rem",
+            "margin": "0.75rem",
+            "space-md": "0.5rem"
+          },
+          "fontFamily": {
+            "label-sm": ["JetBrains Mono"],
+            "mono-timestamp": ["JetBrains Mono"],
+            "headline-sm": ["Geist"],
+            "body-lg": ["Geist"],
+            "headline-lg": ["Geist"],
+            "body-sm": ["Geist"],
+            "label-lg": ["JetBrains Mono"],
+            "mono-transcript": ["JetBrains Mono"]
+          },
+          "fontSize": {
+            "label-sm": ["0.6875rem", { "lineHeight": "0.875rem", "letterSpacing": "0.02em", "fontWeight": "500" }],
+            "mono-timestamp": ["0.6875rem", { "lineHeight": "1rem", "letterSpacing": "0.03em", "fontWeight": "400" }],
+            "headline-sm": ["0.875rem", { "lineHeight": "1.25rem", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "body-lg": ["0.875rem", { "lineHeight": "1.375rem", "fontWeight": "400" }],
+            "headline-lg": ["1.25rem", { "lineHeight": "1.5rem", "letterSpacing": "-0.015em", "fontWeight": "600" }],
+            "body-sm": ["0.8125rem", { "lineHeight": "1.25rem", "fontWeight": "400" }],
+            "label-lg": ["0.8125rem", { "lineHeight": "1.125rem", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "mono-transcript": ["0.8125rem", { "lineHeight": "1.375rem", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-size: 16px;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    /* Custom terminal scanline subtle pattern */
+    .terminal-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .terminal-scroll::-webkit-scrollbar-track {
+      background: #0a0e14;
+    }
+    .terminal-scroll::-webkit-scrollbar-thumb {
+      background: #31353c;
+      border-radius: 2px;
+    }
+    .terminal-scroll::-webkit-scrollbar-thumb:hover {
+      background: #00f2c3;
+    }
+
+    @keyframes live-pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(0, 242, 195, 0.7); }
+      50% { opacity: 0.35; box-shadow: 0 0 1px rgba(0, 242, 195, 0.2); }
+    }
+    .animate-live-glow {
+      animation: live-pulse 1.8s infinite ease-in-out;
+    }
+
+    @keyframes cursor-blink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+    .animate-blink {
+      animation: cursor-blink 0.9s infinite;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased select-none min-h-screen flex items-center justify-center p-2 md:p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-surface-container-low via-surface-container-lowest to-surface-container-lowest">
+<!-- Desktop App Window Shell -->
+<div class="w-full max-w-6xl h-[942px] max-h-[960px] flex flex-col bg-surface-container-lowest border border-outline-variant shadow-2xl overflow-hidden relative">
+<!-- Top Titlebar Strip (32px Desktop Chrome) -->
+<header class="w-full flex flex-col bg-surface-container-lowest border-b border-outline-variant">
+<div class="h-8 px-3 flex items-center justify-between bg-surface-container-lowest border-b border-outline-variant select-none">
+<!-- App Title and Live Health Indicator -->
+<div class="flex items-center space-x-2">
+<div class="flex items-center space-x-1.5 mr-2">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-live-glow"></span>
+<span class="w-1.5 h-1.5 rounded-full bg-secondary-container"></span>
+</div>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface tracking-tight">Transcriptor en vivo</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.2 bg-surface-container text-secondary font-mono-timestamp border border-outline-variant rounded">v3.4-PRO</span>
+</div>
+</div>
+<!-- Control Toolbar: Row 1 (Primary Recording Actions) -->
+<div class="px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 bg-surface-container-low border-b border-outline-variant">
+<!-- Left Group: Master Transcribir button + Secondary Actions -->
+<div class="flex items-center space-x-1.5 flex-wrap">
+<!-- Primary Accent Record Button -->
+<button id="btn-start" class="bg-primary-container text-on-primary-fixed hover:bg-primary-fixed active:scale-[0.98] transition-transform duration-100 ease-out font-label-lg text-label-lg font-semibold px-3 py-1 flex items-center space-x-1.5 rounded shadow-[0_0_10px_rgba(0,242,195,0.25)] border border-primary-fixed">
+<span class="w-2 h-2 rounded-full bg-on-primary-fixed animate-ping"></span>
+<span class="material-symbols-outlined text-[17px]" style="font-variation-settings: 'FILL' 1;">mic</span>
+<span>Transcribir</span>
+</button>
+<!-- Parar Action -->
+<button id="btn-stop" class="bg-surface-container-high text-on-surface hover:bg-surface-container-highest hover:text-on-surface border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2.5 py-1 flex items-center space-x-1 rounded">
+<span class="material-symbols-outlined text-[15px] text-error">stop</span>
+<span>Parar</span>
+</button>
+<div class="h-4 w-px bg-outline-variant mx-1"></div>
+<!-- Abrir transcript -->
+<button id="btn-open"
+ class="bg-surface-container-high text-on-surface hover:bg-surface-container-highest border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2.5 py-1 flex items-center space-x-1 rounded">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">folder_open</span>
+<span>Abrir transcript</span>
+</button>
+<!-- Exportar TXT -->
+<button id="btn-export-txt" class="bg-surface-container-high text-on-surface hover:bg-surface-container-highest border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2.5 py-1 flex items-center space-x-1 rounded">
+<span class="material-symbols-outlined text-[15px] text-secondary">download</span>
+<span>Exportar TXT</span>
+</button>
+<!-- Copiar -->
+<button id="btn-copy"
+ class="bg-surface-container-high text-on-surface hover:bg-surface-container-highest border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2.5 py-1 flex items-center space-x-1 rounded">
+<span class="material-symbols-outlined text-[15px] text-on-surface-variant">content_copy</span>
+<span>Copiar</span>
+</button>
+</div>
+</div>
+<!-- Control Toolbar: Row 2 (AI / Pi Summary Actions Ribbon) -->
+<div class="px-3 py-1 flex flex-wrap items-center justify-between gap-1.5 bg-surface-container-lowest border-b border-outline-variant">
+<!-- Left: Summary Action Buttons -->
+<div class="flex items-center space-x-1.5 flex-wrap">
+<button id="btn-summary" class="bg-surface-container-high text-primary-container hover:bg-surface-container-highest border border-secondary-container/40 active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm font-semibold px-2.5 py-1 flex items-center space-x-1.5 rounded shadow-[0_0_8px_rgba(0,242,195,0.15)]">
+<span class="material-symbols-outlined text-[15px] text-primary-container" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span>Resumir con Pi</span>
+</button>
+<button id="btn-summary-live" class="bg-surface-container text-on-surface hover:bg-surface-container-high border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2 py-0.5 flex items-center space-x-1 rounded">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">history_toggle_off</span>
+<span>Resumir hasta ahora</span>
+</button>
+<button id="btn-cancel-summary" class="bg-surface-container text-on-surface-variant hover:text-error hover:bg-surface-container-high border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2 py-0.5 flex items-center space-x-1 rounded">
+<span class="material-symbols-outlined text-[14px]">cancel</span>
+<span>Cancelar resumen</span>
+</button>
+<button id="btn-copy-summary" class="bg-surface-container text-on-surface hover:bg-surface-container-high border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2 py-0.5 flex items-center space-x-1 rounded">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">file_copy</span>
+<span>Copiar resumen</span>
+</button>
+</div>
+</div>
+<!-- Tab Navigation Row -->
+<nav class="px-3 flex items-center justify-between bg-surface-container-lowest border-b border-outline-variant pt-1">
+<div class="flex items-center space-x-4">
+<!-- Active Tab: Transcripción -->
+<button id="tab-transcripcion" class="border-b-2 border-primary-container text-on-surface font-semibold pb-1.5 flex items-center space-x-1.5 font-label-lg text-label-lg">
+<span class="material-symbols-outlined text-[15px] text-primary-container">notes</span>
+<span>Transcripción</span>
+<span id="lines-count" class="px-1.5 py-0.2 rounded-full bg-primary-container/20 text-primary-container border border-primary-container/40 font-mono-timestamp text-[10px] leading-tight font-medium">0 líneas</span>
+</button>
+<!-- Inactive Tab: Resumen (Pi) -->
+<button id="tab-resumen" class="text-on-surface-variant hover:text-on-surface pb-1.5 flex items-center space-x-1.5 transition-colors duration-150 font-label-lg text-label-lg">
+<span class="material-symbols-outlined text-[15px]">psychology</span>
+<span>Resumen (Pi)</span>
+<span id="resumen-indicator" class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+</button>
+</div>
+<!-- Transcript Inline Filter / Search & Quick Settings -->
+<div class="flex items-center space-x-2 pb-1">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-2 text-[14px] text-on-surface-variant">search</span>
+<input id="filterInput" class="bg-surface-container-low text-on-surface font-mono-timestamp text-mono-timestamp placeholder-on-surface-variant pl-7 pr-2 py-0.5 border border-outline-variant rounded focus:outline-none focus:border-primary-container w-44 md:w-56 text-xs" placeholder="Filtrar palabras o tags..." type="text"/>
+</div>
+</div>
+</nav>
+</header>
+<!-- Dismissible system banners (watcherLost, clipboard errors, ...) -->
+<div id="notices" class="hidden px-3 pt-2 bg-surface-container-lowest"></div>
+<!-- Main Work Area: Chat-like Verbatim Meeting Transcript Viewport -->
+<main id="panel-transcripcion" class="flex-1 overflow-y-auto bg-surface-container-low p-3 terminal-scroll font-mono-transcript text-mono-transcript">
+<div id="lines" class="space-y-2">
+</div>
+</main>
+<!-- Summary panel (visible under the Resumen (Pi) tab) -->
+<main id="panel-resumen" class="hidden flex-1 overflow-y-auto bg-surface-container-low p-3 terminal-scroll font-mono-transcript text-mono-transcript">
+<div id="summary-log" class="space-y-2 text-on-surface leading-relaxed whitespace-pre-wrap">
+</div>
+</main>
+<!-- Bottom History and Session Recovery Bar -->
+<section class="h-9 px-3 flex items-center justify-between bg-surface-container-low border-t border-outline-variant select-none">
+<div class="flex items-center space-x-2 flex-1 overflow-hidden mr-2">
+<span class="font-label-sm text-label-sm font-semibold text-secondary-container uppercase tracking-wider shrink-0 flex items-center space-x-1">
+<span class="material-symbols-outlined text-[14px]">manage_history</span>
+<span>Historial:</span>
+</span>
+<!-- Select / Dropdown listing past sessions -->
+<label class="sr-only" for="history-sessions">Seleccionar sesión previa</label>
+<div class="relative max-w-md w-full">
+<select id="history-sessions" disabled class="w-full bg-surface-container text-on-surface font-label-sm text-label-sm border border-outline-variant py-0.5 pl-2 pr-7 rounded focus:border-primary-container focus:outline-none cursor-pointer disabled:opacity-50">
+</select>
+</div>
+<!-- Small companion action buttons -->
+<div class="flex items-center space-x-1 shrink-0">
+<button id="btn-history-open" disabled class="bg-surface-container-high text-on-surface hover:bg-surface-container-highest border border-outline-variant font-label-sm text-label-sm px-2 py-0.5 rounded active:scale-[0.98] transition-all disabled:opacity-50">
+            Abrir
+          </button>
+<button id="btn-history-txt" disabled class="bg-surface-container-high text-on-surface hover:bg-surface-container-highest border border-outline-variant font-label-sm text-label-sm px-2 py-0.5 rounded active:scale-[0.98] transition-all disabled:opacity-50">
+            TXT
+          </button>
+<button id="btn-history-resume" disabled class="bg-surface-container-high text-primary-container hover:bg-surface-container-highest border border-outline-variant font-label-sm text-label-sm px-2 py-0.5 rounded active:scale-[0.98] transition-all flex items-center space-x-1 disabled:opacity-50">
+<span class="material-symbols-outlined text-[12px]">auto_awesome</span>
+<span>Resumir</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Footer: connection and live status strip -->
+<footer class="h-6 px-3 flex justify-between items-center bg-surface-container-lowest border-t border-outline-variant font-mono-timestamp text-mono-timestamp text-on-surface-variant select-none">
+<div class="flex items-center space-x-3">
+<div class="flex items-center space-x-1.5 text-primary-container">
+<span id="footer-dot" class="w-1.5 h-1.5 rounded-full bg-primary-container animate-pulse"></span>
+<span id="footer-status" class="font-medium">Listo.</span>
+</div>
+</div>
+<span id="footer-sse">SSE: desconectado</span>
+</footer>
+</div>
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var lines = $("lines");
+  var currentEvent;
+
+  var ACTIONS = {
+    "start": "btn-start",
+    "stop": "btn-stop",
+    "summary": "btn-summary",
+    "summary-live": "btn-summary-live",
+    "cancel-summary": "btn-cancel-summary",
+    "export-txt": "btn-export-txt",
+    // open / export-history are history-relative actions handled in code
+  };
+  var HISTORY_DISABLE = "btn-history-open btn-history-txt btn-history-resume";
+
+  // --- inline notices (never alert) ------------------------------------- //
+
+  function notice(text, kind, extraButton) {
+    var host = $("notices");
+    host.classList.remove("hidden");
+    var bar = document.createElement("div");
+    var tone = kind === "error" ? "error-container" : "surface-container-high";
+    var toneText = kind === "error" ? "on-error-container" : "on-surface";
+    bar.className = "mb-1 px-2 py-1 rounded border border-outline-variant " +
+      "bg-" + tone + " text-" + toneText +
+      " font-label-sm text-label-sm flex items-center justify-between";
+    var label = document.createElement("span");
+    label.textContent = text;
+    bar.appendChild(label);
+    var close = document.createElement("button");
+    close.className = "px-2 hover:text-primary transition-colors";
+    close.textContent = "×";
+    close.addEventListener("click", function () {
+      bar.remove();
+      if (!host.children.length) host.classList.add("hidden");
+    });
+    if (extraButton) {
+      bar.appendChild(extraButton);
+    }
+    bar.appendChild(close);
+    bar.dataset.banner = "1";
+    host.appendChild(bar);
+    return bar;
+  }
+
+  function lastNoticeText() {
+    var host = $("notices");
+    if (!host.children.length) return "";
+    return host.lastChild.textContent;
+  }
+
+  // --- transcript rows --------------------------------------------------- //
+
+  var ROW_BASE = "group flex items-start space-x-2.5 p-1.5 rounded " +
+    "hover:bg-surface-container transition-colors duration-100 " +
+    "border border-transparent hover:border-outline-variant";
+  var TAIL_BASE = "flex items-start space-x-2.5 p-2 rounded bg-surface-container " +
+    "border border-primary-container/30 shadow-[inset_0_0_8px_rgba(0,242,195,0.08)]";
+  var CHIP = "font-mono-timestamp text-mono-timestamp text-outline shrink-0";
+
+  function buildRow(stamp, text, provisional) {
+    var row = document.createElement("div");
+    row.className = provisional ? TAIL_BASE : ROW_BASE;
+    row.dataset.provisional = provisional ? "1" : "0";
+    var chip = document.createElement("span");
+    chip.className = provisional
+      ? "font-mono-timestamp text-mono-timestamp text-primary-fixed-dim shrink-0"
+      : CHIP;
+    chip.textContent = "[" + stamp + "]";
+    var p = document.createElement("p");
+    p.className = "text-on-surface leading-relaxed";
+    p.textContent = text;
+    row.appendChild(chip);
+    row.appendChild(p);
+    if (provisional) {
+      // Blinking cursor marks it as a growing tail row.
+      var cursor = document.createElement("span");
+      cursor.className = "inline-block w-2 h-4 bg-primary-container align-middle " +
+        "ml-1 animate-blink shadow-[0_0_6px_#00f2c3]";
+      p.appendChild(cursor);
+    }
+    return row;
+  }
+
+  // A confirmed line turns the growing tail into a normal grouped row.
+  function finalizeTail() {
+    var last = lines.lastChild;
+    if (!last || last.dataset.provisional !== "1") return;
+    lines.replaceChild(buildRow(
+      last.firstChild.textContent.replace(/\[|\]/g, ""),
+      last.lastChild.textContent, false), last);
+  }
+
+  function applyFilter() {
+    var needle = $("filterInput").value.trim().toLowerCase();
+    var children = Array.prototype.slice.call(lines.children);
+    children.forEach(function (row) {
+      var hay = (row.textContent || "").toLowerCase();
+      if (!needle || hay.indexOf(needle) !== -1) {
+        row.classList.remove("hidden");
+      } else {
+        row.classList.add("hidden");
+      }
+    });
+  }
+
+  // --- panels ------------------------------------------------------------ //
+
+  function showTab(which) {
+    var transOn = which === "transcripcion";
+    $("panel-transcripcion").classList.toggle("hidden", !transOn);
+    $("panel-resumen").classList.toggle("hidden", transOn);
+    $("tab-transcripcion").classList.toggle("border-primary-container", transOn);
+    $("tab-transcripcion").classList.toggle("text-on-surface", transOn);
+    $("tab-transcripcion").classList.toggle("text-on-surface-variant", !transOn);
+    $("tab-resumen").classList.toggle("border-primary-container", !transOn);
+    $("tab-resumen").classList.toggle("text-on-surface", !transOn);
+    $("tab-resumen").classList.toggle("text-on-surface-variant", transOn);
+  }
+
+  // --- actions (single JSON POST helper) --------------------------------- //
+
+  function act(action, extra) {
+    var body = extra || {};
+    body.action = action;
+    return fetch("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); })
+      .then(function (out) {
+        if (!out.ok && out.error) {
+          notice(out.error, "error");
+        }
+        return out;
+      })
+      .catch(function (err) { notice(String(err), "error"); });
+  }
+
+  function wireAction(id, action, redirectPanel) {
+    $(id).addEventListener("click", function () {
+      if (redirectPanel) showTab("resumen");
+      act(action);
+    });
+  }
+
+  // --- history ----------------------------------------------------------- //
+
+  function selectedHistory() {
+    return $("history-sessions").value || "";
+  }
+
+  function renderHistory(items) {
+    var select = $("history-sessions");
+    var previous = select.value;
+    select.innerHTML = "";
+    if (!items.length) {
+      select.disabled = true;
+      updateHistoryButtons(true);
+      return;
+    }
+    items.forEach(function (name) {
+      var option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    select.disabled = false;
+    var keep = Array.prototype.some.call(
+      select.options, function (o) { return o.value === previous; });
+    if (keep) select.value = previous;
+    updateHistoryButtons(false);
+  }
+
+  function updateHistoryButtons(disabled) {
+    HISTORY_DISABLE.split(" ").forEach(function (id) {
+      $(id).disabled = disabled;
+    });
+  }
+
+  function wireHistoryButtons() {
+    $("btn-history-open").addEventListener("click", function () {
+      act("open", { "name": selectedHistory() });
+    });
+    $("btn-history-txt").addEventListener("click", function () {
+      act("export-history", { "name": selectedHistory() });
+    });
+    $("btn-history-resume").addEventListener("click", function () {
+      act("summary", { "name": selectedHistory() });
+      showTab("resumen");
+    });
+  }
+
+  // --- copy helpers ------------------------------------------------------ //
+
+  function copyText(text, label) {
+    navigator.clipboard.writeText(text).then(
+      function () { notice(label + " copiado al portapapeles."); },
+      function () { notice("No se pudo usar el portapapeles.", "error"); });
+  }
+
+  function wireCopyButtons() {
+    $("btn-copy").addEventListener("click", function () {
+      var text = lines.textContent.replace(/\n\s*\n/g, "\n").trim();
+      if (!text) {
+        notice("Todavía no hay transcript para copiar.");
+        return;
+      }
+      copyText(text, "Transcript");
+    });
+    $("btn-copy-summary").addEventListener("click", function () {
+      fetch("/api/resumen-text").then(function (r) { return r.json(); })
+        .then(function (out) {
+          if (out.text) {
+            copyText(out.text, "Resumen");
+          } else if (out.error) {
+            notice(out.error, "error");
+          } else {
+            notice("Todavía no hay resumen.");
+          }
+        })
+        .catch(function (err) { notice(String(err), "error"); });
+    });
+  }
+
+  // --- state ------------------------------------------------------------- //
+
+  function applyState(st) {
+    renderHistory(st.history || []);
+    if (st.status) {
+      $("footer-status").textContent = st.status;
+    }
+    // Recording controls mirror the orchestrator session state.
+    $("btn-start").disabled = !!st.transcribing;
+    $("btn-stop").disabled = !st.transcribing;
+    // Without Pi the summary buttons are inert.
+    var pi = st.piAvailable !== false;
+    ["btn-summary", "btn-summary-live", "btn-history-resume"].forEach(
+      function (id) { $(id).disabled = !pi; });
+    $("btn-cancel-summary").disabled = !st.summaryRunning;
+  }
+
+  // --- SSE --------------------------------------------------------------- //
+
+  function connectEvents() {
+    currentEvent = new EventSource("/events");
+    currentEvent.onopen = function () {
+      $("footer-sse").textContent = "SSE: conectado";
+    };
+    currentEvent.onerror = function () {
+      $("footer-sse").textContent = "SSE: reconectando...";
+    };
+    currentEvent.addEventListener("message", function (ev) {
+      var data;
+      try {
+        data = JSON.parse(ev.data);
+      } catch (err) {
+        return; // ignore malformed payloads
+      }
+      handleEvent(data);
+    });
+  }
+
+  function handleEvent(data) {
+    switch (data.type) {
+      case "line": {
+        if (data.text) {
+          finalizeTail();
+          lines.appendChild(buildRow(data.stamp, data.text, false));
+          $("lines-count").textContent =
+            String(lines.children.length) + " líneas";
+          applyFilter();
+        }
+        break;
+      }
+      case "tail": {
+        if (data.text) {
+          var tailTail = lines.lastChild;
+          var provisional = tailTail &&
+            tailTail.dataset.provisional === "1";
+          if (provisional) {
+            tailTail.lastChild.textContent = data.text;
+            var cursor = document.createElement("span");
+            cursor.className = "inline-block w-2 h-4 bg-primary-container " +
+              "align-middle ml-1 animate-blink shadow-[0_0_6px_#00f2c3]";
+            tailTail.lastChild.appendChild(cursor);
+          } else {
+            lines.appendChild(buildRow(data.stamp, data.text, true));
+          }
+          applyFilter();
+        }
+        break;
+      }
+      case "status": {
+        $("footer-status").textContent = data.text;
+        break;
+      }
+      case "state": {
+        applyState(data);
+        break;
+      }
+      case "history": {
+        renderHistory((data.items || []).map(function (item) {
+          return typeof item === "string" ? item : item.name;
+        }));
+        break;
+      }
+      case "summaryStarted": {
+        showTab("resumen");
+        $("resumen-indicator").className = "w-2 h-2 rounded-full " +
+          "bg-primary-container animate-ping";
+        break;
+      }
+      case "summaryProgress":
+      case "summaryDelta": {
+        if (data.text) {
+          $("summary-log").appendChild(
+            document.createTextNode(data.text + "\n"));
+        }
+        break;
+      }
+      case "summaryDone": {
+        $("resumen-indicator").className = "w-1.5 h-1.5 rounded-full bg-outline";
+        if (data.ok) {
+          $("summary-log").appendChild(
+            document.createTextNode("Resumen guardado.\n"));
+        }
+        break;
+      }
+      case "summaryFailed": {
+        if (data.text) {
+          $("summary-log").appendChild(
+            document.createTextNode(data.text + "\n"));
+        }
+        notice("El resumen falló.", "error");
+        break;
+      }
+      case "watcherLost": {
+        var retry = document.createElement("button");
+        retry.className = "px-2 py-0.5 rounded bg-primary-container " +
+          "text-on-primary-fixed font-label-sm text-label-sm";
+        retry.textContent = "Reanudar";
+        retry.addEventListener("click", function (ev) {
+          var banner = ev.currentTarget.closest("[data-banner]");
+          if (banner) banner.remove();
+          if (!$("notices").children.length) {
+            $("notices").classList.add("hidden");
+          }
+          act("start", { "resume": true });
+        });
+        notice((data.message || "El watcher terminó.") +
+          " Sesión interrumpida.", "error", retry);
+        break;
+      }
+      case "ping":
+      default:
+        break; // keep-alive only
+    }
+  }
+
+  // --- open current transcript ------------------------------------------- //
+
+  function wireOpenLast() {
+    $("btn-open").addEventListener("click", function () {
+      // The newest *_live-captions.md IS the session the last line came from.
+      fetch("/api/state").then(function (r) { return r.json(); })
+        .then(function (st) {
+          var names = st.history || [];
+          if (names.length) {
+            act("open", { "name": names[0] });
+          } else {
+            notice("Todavía no hay transcript para abrir.");
+          }
+        })
+        .catch(function (err) { notice(String(err), "error"); });
+    });
+  }
+
+  // --- bootstrap ----------------------------------------------------------- //
+
+  document.addEventListener("DOMContentLoaded", function () {
+    wireAction("btn-start", "start");
+    wireAction("btn-stop", "stop");
+    wireAction("btn-summary", "summary", true);
+    wireAction("btn-summary-live", "summary-live", true);
+    wireAction("btn-cancel-summary", "cancel-summary");
+    wireAction("btn-export-txt", "export-txt");
+    wireHistoryButtons();
+    wireCopyButtons();
+    wireOpenLast();
+    showTab("transcripcion");           // default panel
+    $("filterInput").addEventListener("input", applyFilter);
+    $("tab-transcripcion").addEventListener("click",
+      function () { showTab("transcripcion"); });
+    $("tab-resumen").addEventListener("click",
+      function () { showTab("resumen"); });
+
+    // Initial state, then live events: one render, then push updates.
+    fetch("/api/state")
+      .then(function (r) { return r.json(); })
+      .then(function (st) {
+        applyState(st);
+        connectEvents();
+      })
+      .catch(function (err) { notice(String(err), "error"); });
+  });
+})();
+</script>
+</body></html>
