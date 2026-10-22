@@ -99,6 +99,53 @@ def copyable_line(block: str) -> str:
     return block.rstrip("\n")
 
 
+def apply_theme(root: tk.Tk) -> None:
+    """T10: stitch-derived dark identity; static config, zero per-line cost.
+
+    Module-level so tests can pin the styles without building the full App
+    (its timers and the pi probe thread would outlive a destroy).
+    """
+    p = PALETTE
+    root.configure(bg=p["bg"])
+    root.option_add("*TCombobox*Listbox.background", p["panel"])
+    root.option_add("*TCombobox*Listbox.foreground", p["text"])
+    root.option_add("*TCombobox*Listbox.selectBackground", p["tab_active"])
+    root.option_add("*TCombobox*Listbox.selectForeground", p["accent"])
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")  # honors border/background config on Windows
+    except tk.TclError:
+        pass
+    style.configure(".", background=p["bg"], foreground=p["text"],
+                    font=("Segoe UI", 9))
+    style.configure("TFrame", background=p["bg"])
+    style.configure("TLabel", background=p["bg"], foreground=p["text"])
+    style.configure("Muted.TLabel", background=p["bg"], foreground=p["muted"])
+    style.configure("TButton", background=p["panel"], foreground=p["text"],
+                    bordercolor=p["border"], focuscolor=p["accent"],
+                    padding=(8, 3))
+    style.map("TButton",
+              background=[("active", p["tab_active"]), ("disabled", p["bg"])],
+              foreground=[("disabled", p["muted"])])
+    style.configure("Accent.TButton", background=p["accent"],
+                    foreground=p["accent_text"], bordercolor=p["accent"])
+    style.map("Accent.TButton",
+              background=[("active", "#39e0cb"), ("disabled", p["panel"])],
+              foreground=[("disabled", p["muted"])])
+    style.configure("TNotebook", background=p["bg"], bordercolor=p["border"])
+    style.configure("TNotebook.Tab", background=p["panel"], foreground=p["muted"],
+                    padding=(10, 3))
+    style.map("TNotebook.Tab",
+              background=[("selected", p["tab_active"])],
+              foreground=[("selected", p["accent"])])
+    style.configure("TCombobox", fieldbackground=p["panel"], background=p["panel"],
+                    foreground=p["text"], arrowcolor=p["accent"],
+                    bordercolor=p["border"])
+    style.map("TCombobox",
+              fieldbackground=[("readonly", p["panel"])],
+              foreground=[("readonly", p["text"])])
+
+
 def livecaptions_running() -> int | None:
     """Return the pid of a running LiveCaptions.exe, or None."""
     try:
@@ -173,10 +220,16 @@ class WatcherSession:
             line = raw.rstrip("\r\n")
             if not line:
                 continue
-            # '> growing tail' -> the caption that is still being typed.
+            # '- growing tail' -> the caption that is still being typed.
             if line.startswith("> "):
                 if self.on_tail:
                     self.on_tail(line[2:])
+                continue
+            # Watcher console noise (never transcript content): the run's
+            # own bookkeeping lines must not become transcript rows.
+            if (line.startswith(("source :", "output :", "reading -",
+                                 "resume  :"))
+                    or re.match(r"^\d+ line\(s\) -> ", line)):
                 continue
             # '- **[hh:mm:ss]** text' -> show the text
             self.lines_since_stop += 1
@@ -208,7 +261,7 @@ class App(ttk.Frame):
         self.root = root
         root.title("Transcriptor en vivo")
         root.minsize(560, 380)
-        self._apply_theme(root)
+        apply_theme(root)
 
         self.session: WatcherSession | None = None
         self.last_transcript = ""
@@ -220,48 +273,6 @@ class App(ttk.Frame):
         self.pack(fill="both", expand=True)
         root.protocol("WM_DELETE_WINDOW", self._on_close)
         root.after(400, self._keep_status_time)
-
-    def _apply_theme(self, root: tk.Tk) -> None:
-        """T10: stitch-derived dark identity; static config, zero per-line cost."""
-        p = PALETTE
-        root.configure(bg=p["bg"])
-        root.option_add("*TCombobox*Listbox.background", p["panel"])
-        root.option_add("*TCombobox*Listbox.foreground", p["text"])
-        root.option_add("*TCombobox*Listbox.selectBackground", p["tab_active"])
-        root.option_add("*TCombobox*Listbox.selectForeground", p["accent"])
-        style = ttk.Style(root)
-        try:
-            style.theme_use("clam")  # honors border/background config on Windows
-        except tk.TclError:
-            pass
-        style.configure(".", background=p["bg"], foreground=p["text"],
-                        font=("Segoe UI", 9))
-        style.configure("TFrame", background=p["bg"])
-        style.configure("TLabel", background=p["bg"], foreground=p["text"])
-        style.configure("Muted.TLabel", background=p["bg"], foreground=p["muted"])
-        style.configure("TButton", background=p["panel"], foreground=p["text"],
-                        bordercolor=p["border"], focuscolor=p["accent"],
-                        padding=(8, 3))
-        style.map("TButton",
-                  background=[("active", p["tab_active"]), ("disabled", p["bg"])],
-                  foreground=[("disabled", p["muted"])])
-        style.configure("Accent.TButton", background=p["accent"],
-                        foreground=p["accent_text"], bordercolor=p["accent"])
-        style.map("Accent.TButton",
-                  background=[("active", "#39e0cb"), ("disabled", p["panel"])],
-                  foreground=[("disabled", p["muted"])])
-        style.configure("TNotebook", background=p["bg"], bordercolor=p["border"])
-        style.configure("TNotebook.Tab", background=p["panel"], foreground=p["muted"],
-                        padding=(10, 3))
-        style.map("TNotebook.Tab",
-                  background=[("selected", p["tab_active"])],
-                  foreground=[("selected", p["accent"])])
-        style.configure("TCombobox", fieldbackground=p["panel"], background=p["panel"],
-                        foreground=p["text"], arrowcolor=p["accent"],
-                        bordercolor=p["border"])
-        style.map("TCombobox",
-                  fieldbackground=[("readonly", p["panel"])],
-                  foreground=[("readonly", p["text"])])
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -412,11 +423,20 @@ class App(ttk.Frame):
 
     def _probe_pi(self) -> None:
         ok = pi_bridge.available()
-        self.root.after(0, lambda: self.btn_summary.configure(
-            state="normal" if ok else "disabled"))
-        if not ok:
-            self.root.after(0, lambda: self.status_var.set(
-                "Pi no esta disponible: no se podra resumir."))
+
+        def apply() -> None:
+            try:
+                self.btn_summary.configure(
+                    state="normal" if ok else "disabled")
+                if not ok:
+                    self.status_var.set(
+                        "Pi no esta disponible: no se podra resumir.")
+            except (tk.TclError, RuntimeError):
+                pass  # the app was closed while the probe was running
+        try:
+            self.root.after(0, apply)
+        except (tk.TclError, RuntimeError):
+            pass
 
     # --- actions -------------------------------------------------------- #
 

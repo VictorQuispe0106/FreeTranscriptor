@@ -178,19 +178,14 @@ class ThemeTests(unittest.TestCase):
         root = tk.Tk()
         root.withdraw()
         try:
-            app_obj = transcriptor_app.App(root)
+            transcriptor_app.apply_theme(root)
             style = transcriptor_app.ttk.Style(root)
             self.assertEqual(root.cget("bg"),
                              transcriptor_app.PALETTE["bg"])
             self.assertEqual(style.lookup("Accent.TButton", "background"),
                              transcriptor_app.PALETTE["accent"])
-            self.assertEqual(self._text_bg(app_obj),
-                             transcriptor_app.PALETTE["panel"])
         finally:
             root.destroy()
-
-    def _text_bg(self, app_obj):
-        return app_obj.lines.cget("bg")
 
 
 if __name__ == "__main__":

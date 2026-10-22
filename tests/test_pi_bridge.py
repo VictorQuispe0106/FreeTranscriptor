@@ -140,5 +140,64 @@ class RealSmoke(unittest.TestCase):
             self.assertTrue(deltas, "the summary should stream deltas")
 
 
+class SummarizeEndToEndTests(unittest.TestCase):
+    """The public entry point, hermetic: Pi binary stubbed at Popen level.
+
+    Regression: pi_bridge used pathlib.Path without importing it, so every
+    real summary crashed with NameError after the watcher produced a file.
+    """
+
+    def test_summarize_reads_the_transcript_file(self):
+        import subprocess as sp
+        import threading as th
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "run_live-captions.md")
+            with open(target, "w", encoding="utf-8", newline="") as fh:
+                fh.write("# Transcript\n\n- **[00:00:01]** estado del proyecto\n")
+
+            class FakeProc:
+                def __init__(self):
+                    self.stdin = self._Ctx()
+                    self.stdout = self._Out(FIXTURE)
+                    self.stderr = self._Out("")
+
+                class _Ctx:
+                    def write(self, *a):
+                        pass
+
+                    def close(self):
+                        pass
+
+                class _Out:
+                    def __init__(self, text):
+                        self._buf = text.encode("utf-8")
+
+                    def read(self, n=-1):
+                        if not self._buf:
+                            return b""
+                        chunk, self._buf = self._buf[:4096], self._buf[4096:]
+                        return chunk
+
+                def kill(self):
+                    pass
+
+                def wait(self, timeout=None):
+                    return 0
+
+            original = pi_bridge.subprocess.Popen
+
+            def fake_popen(*args, **kwargs):
+                return FakeProc()
+
+            pi_bridge.subprocess.Popen = fake_popen
+            try:
+                got = pi_bridge.summarize(target)
+            finally:
+                pi_bridge.subprocess.Popen = original
+        self.assertIn("## Resumen", got)
+        self.assertIn("estado del proyecto", got)
+
+
 if __name__ == "__main__":
     unittest.main()

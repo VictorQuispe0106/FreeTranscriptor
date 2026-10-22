@@ -383,13 +383,13 @@
     return row;
   }
 
-  // A confirmed line turns the growing tail into a normal grouped row.
-  function finalizeTail() {
+  // The confirmed row REPLACES the provisional tail (tkinter parity): the
+  // tail row is removed, never kept, so a caption renders exactly once.
+  function removeTail() {
     var last = lines.lastElementChild;
-    if (!last || !last.dataset || last.dataset.provisional !== "1") return;
-    lines.replaceChild(buildRow(
-      last.firstChild.textContent.replace(/\[|\]/g, ""),
-      last.lastChild.textContent, false), last);
+    if (last && last.dataset && last.dataset.provisional === "1") {
+      lines.removeChild(last);
+    }
   }
 
   function applyFilter() {
@@ -569,7 +569,7 @@
     switch (data.type) {
       case "line": {
         if (data.text) {
-          finalizeTail();
+          removeTail();
           lines.appendChild(buildRow(data.stamp, data.text, false));
           $("lines-count").textContent =
             String(lines.children.length) + " líneas";
