@@ -59,3 +59,11 @@ Pi) no se toca; el tkinter queda como front alternativo.
   espera acotada por la ventana UIA, JS null-safe (lastElementChild + dataset),
   favicon 204. Playwright end-to-end: Abriendo -> Transcribiendo -> líneas -> stop
   limpio, cero errores de consola. Suite 69 green.
+- **L6** (usuario, corrida real 14:44): duplicados visibles en la página + crash del
+  resumen con `NameError: name 'Path' is not defined`. Fix `81efa0f`: (a) `Path` sin
+  importar en pi_bridge rompía TODO resumen real (pinado con test end-to-end
+  hermético); (b) el front web duplicaba cada caption (fila tail convertida + fila
+  confirmada: el .md estaba limpio, era solo front) → removeTail() como tkinter;
+  (c) el ruido de consola del watcher (source/output/reading/resume) dejaba de
+  renderizarse como filas del transcript. Playwright: 11 filas, 0 duplicados, 0
+  basura, resumen completo, cero pageerrors. Suite 70 green.
