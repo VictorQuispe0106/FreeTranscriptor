@@ -202,7 +202,11 @@ try {
             # restart instead of spinning silently forever.
             $misses++
             if ($misses -gt 60) {
-                Write-Error 'Live Captions window lost - stopping (app may restart).'
+                # Write-Host, NOT Write-Error: with ErrorActionPreference=Stop
+                # a Write-Error becomes a terminating error and the process
+                # dies with exit 1, never reaching this exit 2 that the app
+                # maps to its restart offer.
+                Write-Host 'Live Captions window lost - stopping (app may restart).'
                 exit 2
             }
         }
