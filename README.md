@@ -33,8 +33,19 @@ Doble clic en **`Transcriptor App.bat`** (o `py transcriptor_app.py`).
 4. **Exportar TXT** - escribe el texto plano con timestamps (`[hh:mm:ss] frase`) y lo abre.
 5. **Resumir con Pi** - genera el resumen del transcript con IA (ver abajo).
 6. **Cancelar resumen** - corta el resumen en curso.
+7. **Resumir hasta ahora** - resume lo dicho hasta ese momento *mientras sigue
+   transcribiendo*: no corta la sesión ni toca los botones de transcripción.
+8. **Copiar / Copiar resumen** - manda el transcript (o el resumen) al portapapeles para
+   pegar directo en Teams o en un mail.
+9. **Historial** - lista los `*_live-captions.md` anteriores de `transcripts\`; con
+   **Abrir**, **TXT** y **Resumir** sobre el que elijas, sin salir de la app.
 
-Cada sesión guarda en `transcripts\<fecha>_live-captions.md`.
+Cada sesión guarda en `transcripts\<fecha>_live-captions.md`. Los timestamps del
+archivo son de **hora real** (reloj de pared), así que la primera tanda de líneas ya no
+sale como una ráfaga de `00:00:00`. Si la ventana de Subtítulos se cierra en plena
+reunión, la app lo detecta y ofrece **reiniciar en el mismo archivo** (sin duplicar
+líneas). La app tampoco lee otra instancia vieja de Live Captions: fija el PID de la
+que abrió.
 
 ## Resumen con IA (Pi local, sin API keys)
 
@@ -45,6 +56,8 @@ Cada sesión guarda en `transcripts\<fecha>_live-captions.md`.
   las líneas repetidas que reescribe Live Captions y quita repeticiones de palabras.
 - Resume **sobre el texto limpio** y escribe `transcripts\<stem>.resumen.md` con secciones fijas:
   `## Resumen`, `## Puntos clave`, `## Decisiones`, `## Acciones`, `## Pendientes`, `## Citas`.
+- El resumen vive y se muestra en su **pestaña propia** de la app, separado del
+  transcript; hay botón para copiarlo al portapapeles.
 - Guarda una copia exacta de lo resumido en `transcripts\.snapshots\`.
 - Podés **Cancelar** en cualquier momento; el transcript crudo y el limpio nunca se tocan.
 - El proceso de Pi corre contenido (solo lectura de archivos). No consume keys, no usa sesión,
@@ -82,8 +95,9 @@ El `.md` aparece en `transcripts\<fecha>_live-captions.md` y crece solo. `Ctrl+C
 
 - Sin atribución de quién habla: es un flujo continuo de líneas.
 - Requiere Live Captions abierto y con el paquete de idioma instalado.
-- La primera tanda de líneas sale toda en `00:00:00` porque es el buffer que ya estaba en
-  pantalla al arrancar; después los timestamps avanzan de verdad.
+- El buffer que Live Captions ya traía en pantalla al arrancar entra con hora de pared
+  aproximada (los timestamps ya no salen `00:00:00`, pero el clock de esa tanda es el
+  de la lectura, no el de cuando se habló).
 - Live Captions mantiene una ventana rotativa, por eso el script lee cada 350 ms.
 - La calidad del texto es la de Windows, no la de Whisper: no se puede reprocesar el audio.
 

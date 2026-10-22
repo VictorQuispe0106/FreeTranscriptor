@@ -210,7 +210,7 @@ class App(ttk.Frame):
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(2, weight=1)
+        self.rowconfigure(3, weight=1)
 
         ttk.Label(
             self, text="Transcribe lo que se escucha por los parlantes "
@@ -235,10 +235,30 @@ class App(ttk.Frame):
         self.btn_copy.pack(side="left")
         threading.Thread(target=self._probe_pi, daemon=True).start()
 
+        # S8: explicit partial summary, running while transcription continues.
+        derived = ttk.Frame(self)
+        derived.grid(column=0, row=2, sticky="ew", padx=12, pady=(0, 6))
+        self.btn_summary = ttk.Button(derived, text="Resumir con Pi",
+                                      command=self.run_summary,
+                                      state="disabled")
+        self.btn_live = ttk.Button(derived, text="Resumir hasta ahora",
+                                   command=self.run_live_summary,
+                                   state="disabled")
+        self.btn_cancel = ttk.Button(derived, text="Cancelar resumen",
+                                     command=self.cancel_summary,
+                                     state="disabled")
+        self.btn_copy_sum = ttk.Button(derived, text="Copiar resumen",
+                                       command=self.copy_summary,
+                                       state="disabled")
+        self.btn_summary.pack(side="left", padx=(0, 8))
+        self.btn_live.pack(side="left", padx=(0, 8))
+        self.btn_cancel.pack(side="left", padx=(0, 8))
+        self.btn_copy_sum.pack(side="left")
+
         # S1: session history row. Actions apply to the selected prior file,
         # never to the running session.
         history = ttk.Frame(self)
-        history.grid(column=0, row=3, sticky="ew", padx=12, pady=(2, 2))
+        history.grid(column=0, row=4, sticky="ew", padx=12, pady=(2, 2))
         ttk.Label(history, text="Historial:").pack(side="left", padx=(0, 4))
         self.history_pick = ttk.Combobox(history, state="readonly", width=52)
         self.history_pick.pack(side="left", padx=(0, 8))
@@ -257,7 +277,7 @@ class App(ttk.Frame):
 
         # S7: the transcript and the Pi summary never share one widget again.
         notebook = ttk.Notebook(self)
-        notebook.grid(column=0, row=2, sticky="nsew", padx=12, pady=(4, 4))
+        notebook.grid(column=0, row=3, sticky="nsew", padx=12, pady=(4, 4))
         trans_tab = ttk.Frame(notebook)
         sum_tab = ttk.Frame(notebook)
         notebook.add(trans_tab, text="Transcripción")
@@ -275,7 +295,7 @@ class App(ttk.Frame):
         self._notebook = notebook
 
         status = ttk.Label(self, textvariable=self.status_var, anchor="w")
-        status.grid(column=0, row=4, sticky="ew", padx=12, pady=(0, 10))
+        status.grid(column=0, row=5, sticky="ew", padx=12, pady=(0, 10))
         self._refresh_history()
 
     # --- history ---------------------------------------------------------
@@ -362,6 +382,8 @@ class App(ttk.Frame):
             self.session = session
             self.btn_stop.configure(state="normal")
             self.btn_open.configure(state="normal")
+            if pi_bridge.available():
+                self.btn_live.configure(state="normal")
             self.status_var.set("Transcribiendo...")
             self._remember_transcript(session.out_path)
             self._refresh_history()
@@ -374,6 +396,7 @@ class App(ttk.Frame):
             self.session = None
         self.btn_stop.configure(state="disabled")
         self.btn_start.configure(state="normal")
+        self.btn_live.configure(state="disabled")
 
     def open_transcript(self) -> None:
         if not self.session or not self.session.out_path:
@@ -395,7 +418,7 @@ class App(ttk.Frame):
             return
         os.startfile(str(target))  # noqa: S606 (local trusted path)
 
-    def run_summary(self, source: str | None = None) -> None:
+    def run_summary(self, source: str | None = None, live: bool = False) -> None:
         if self.summary_cancel:
             return
         source = source or self.last_transcript
@@ -405,12 +428,37 @@ class App(ttk.Frame):
             return
         self.summary_cancel = threading.Event()
         self.btn_summary.configure(state="disabled")
-        self.btn_start.configure(state="disabled")
+        self.btn_live.configure(state="disabled")
+        if not live:
+            # A final summary owns the app; live partial (S8) never touches the
+            # transcription state: the session keeps running untouched.
+            self.btn_start.configure(state="disabled")
         self.btn_cancel.configure(state="normal")
         self._notebook.select(1)
-        self._summary_line("Resumiendo con Pi... (Cancelale)")
-        threading.Thread(target=self._summary_worker, args=(source,),
+        self._summary_line("Resumiendo con Pi... (Cancelable)")
+        threading.Thread(target=self._summary_worker, args=(source, live),
                          daemon=True).start()
+
+    def run_live_summary(self) -> None:
+        """S8: summarize the growing transcript without stopping the session."""
+        if self.session and self.session.out_path:
+            self.run_summary(self.session.out_path, live=True)
+
+    def copy_summary(self) -> None:
+        resumen = Path(self.last_transcript).with_suffix(".resumen.md")
+        if not self.last_transcript or not resumen.exists():
+            messagebox.showinfo("Transcriptor en vivo",
+                                "Todavia no hay resumen para copiar.")
+            return
+        try:
+            text = resumen.read_text(encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror("Transcriptor en vivo",
+                                 f"No se pudo leer el resumen: {exc}")
+            return
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.status_var.set("Resumen copiado al portapapeles.")
 
     def copy_transcript(self) -> None:
         block = self.lines.get("1.0", "end")
@@ -427,7 +475,7 @@ class App(ttk.Frame):
             self.summary_cancel.set()
             self.status_var.set("Cancelando resumen...")
 
-    def _summary_worker(self, source: str) -> None:
+    def _summary_worker(self, source: str, live: bool) -> None:
         cancel = self.summary_cancel
         assert cancel is not None
         stem = Path(source).stem
@@ -460,13 +508,17 @@ class App(ttk.Frame):
         finally:
             done = self.summary_cancel is not None and cancel is self.summary_cancel
             self.summary_cancel = None
-            self.root.after(0, self._summary_done, derived, done)
+            self.root.after(0, self._summary_done, derived, done, live)
 
-    def _summary_done(self, derived: dict[str, str], ok: bool) -> None:
+    def _summary_done(self, derived: dict[str, str], ok: bool,
+                      live: bool = False) -> None:
         self.btn_cancel.configure(state="disabled")
-        self.btn_start.configure(state="normal")
+        if self.session is None:
+            self.btn_start.configure(state="normal")
         if pi_bridge.available():
             self.btn_summary.configure(state="normal")
+            if live:
+                self.btn_live.configure(state="normal")
         if not ok:
             self.status_var.set("Resumen cancelado o con error.")
             return
@@ -556,6 +608,8 @@ class App(ttk.Frame):
             self.session = session
             self.btn_stop.configure(state="normal")
             self.btn_start.configure(state="disabled")
+            if pi_bridge.available():
+                self.btn_live.configure(state="normal")
             self.status_var.set("Transcribiendo (mismo archivo)...")
 
         self.root.after(0, do_restart)
