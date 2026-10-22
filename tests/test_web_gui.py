@@ -1,0 +1,224 @@
+"""Hermetic tests for the web GUI server (no real LiveCaptions, no network).
+
+Every test builds an in-process server on an ephemeral port via
+``web_gui.build_server(port=0)`` and speaks plain ``http.client`` to it.
+``web_gui.TRANSCRIPTS_DIR`` is pointed at a temporary directory BEFORE the
+server is built because ``Orchestrator`` and ``Handler`` both read that
+module global at call time.
+"""
+
+from __future__ import annotations
+
+import http.client
+import importlib
+import json
+import os
+import shutil
+import socket
+import sys
+import tempfile
+import threading
+import unittest
+import unittest.mock
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+web_gui = importlib.import_module("web_gui")
+
+
+def _free_port() -> int:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
+
+
+class _Restore:
+    """Context manager restoring module attributes even on test failure."""
+
+    def __init__(self, module: object, **overrides: str) -> None:
+        self._module = module
+        self._new = overrides
+        self._old: dict[str, object] = {}
+
+    def __enter__(self):
+        self._old = {k: getattr(self._module, k) for k in self._new}
+        for k, v in self._new.items():
+            setattr(self._module, k, v)
+        return self
+
+    def __exit__(self, *exc):
+        for k, v in self._old.items():
+            setattr(self._module, k, v)
+        return False
+
+
+class WebGuiServerTestCase(unittest.TestCase):
+    """Shared server fixtures: temp transcripts dir + live server."""
+
+    def setUp(self) -> None:
+        base = tempfile.mkdtemp(prefix="transcriptor-web-test-")
+        self.tmp_dir = base
+        self.transcripts_dir = os.path.join(base, "transcripts")
+        os.makedirs(self.transcripts_dir, exist_ok=True)
+        # Real history markdown file with a valid utterance line.
+        self.history_md = "2026_01_28_test_live-captions.md"
+        self._write_utf8(os.path.join(self.transcripts_dir, self.history_md),
+                         "# Transcriptor\n\n- **[00:00:01]** hola\n")
+        self._restore = _Restore(
+            web_gui, TRANSCRIPTS_DIR=self.transcripts_dir)
+        self._restore.__enter__()
+        port = _free_port()
+        self.server = web_gui.build_server(port=port)
+        self.server.daemon_threads = True  # no hung SSE handler threads
+        self.thread = threading.Thread(
+            target=self.server.serve_forever, kwargs={"poll_interval": 0.05},
+            daemon=True)
+        self.thread.start()
+        host, bound = self.server.server_address[:2]
+        self.addr = (host, bound)
+
+    def tearDown(self) -> None:
+        try:
+            self.server.shutdown()
+        finally:
+            self.server.server_close()
+            self.thread.join(timeout=5)
+            self._restore.__exit__()
+            shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    # --- small helpers ----------------------------------------------------- #
+
+    def _write_utf8(self, path: str, text: str) -> None:
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+
+    def _get(self, path: str) -> tuple[int, str]:
+        conn = http.client.HTTPConnection(*self.addr, timeout=10)
+        try:
+            conn.request("GET", path)
+            response = conn.getresponse()
+            return response.status, response.read().decode("utf-8")
+        finally:
+            conn.close()
+
+    def _post(self, path: str, body: str) -> tuple[int, str]:
+        conn = http.client.HTTPConnection(*self.addr, timeout=10)
+        try:
+            conn.request(
+                "POST", path, body=body,
+                headers={"Content-Type": "application/json"})
+            response = conn.getresponse()
+            return response.status, response.read().decode("utf-8")
+        finally:
+            conn.close()
+
+
+class TestGetIndex(WebGuiServerTestCase):
+
+    def test_get_index_serves_stitch_html_without_fakes(self) -> None:
+        status, body = self._get("/")
+        self.assertEqual(status, 200)
+        self.assertIn("Transcriptor", body)
+        # Removed fictional widgets must never come back in the served HTML.
+        self.assertNotIn("VU IN", body)
+        self.assertNotIn("#1024-LIVE", body)
+
+
+class TestGetState(WebGuiServerTestCase):
+
+    def test_get_state_reports_history(self) -> None:
+        status, body = self._get("/api/state")
+        self.assertEqual(status, 200)
+        state = json.loads(body)
+        self.assertIn("history", state)
+        self.assertIsInstance(state["history"], list)
+        self.assertIn(self.history_md, state["history"])
+
+
+class TestServerEvents(WebGuiServerTestCase):
+
+    def test_hub_publish_reaches_sse_client(self) -> None:
+        """A hub.publish lands as a 'data:' line on a real SSE reader."""
+        received: list[str] = []
+        got_line = threading.Event()
+        conn = http.client.HTTPConnection(*self.addr, timeout=10)
+
+        def reader() -> None:
+            try:
+                conn.request("GET", "/events")
+                response = conn.getresponse()
+                if response.status != 200:
+                    return
+                while not got_line.is_set():
+                    line = response.fp.readline().decode("utf-8")
+                    if not line:
+                        return
+                    received.append(line)
+                    if "Hub status x" in line:
+                        got_line.set()
+                        return
+            except OSError:
+                pass
+
+        thread = threading.Thread(target=reader, daemon=True)
+        thread.start()
+        # Wait for the SSE handler to register its queue on the hub.
+        for _ in range(200):
+            if getattr(web_gui.Handler, "hub") is not None and \
+                    web_gui.Handler.hub._clients:
+                break
+            threading.Event().wait(0.05)
+        web_gui.Handler.hub.publish(
+            {"type": "status", "text": "Hub status x"})
+        self.assertTrue(got_line.wait(timeout=5),
+                        f"no SSE data received: {received!r}")
+        got_line.set()
+        try:
+            conn.close()
+        except OSError:
+            pass
+        self.assertTrue(
+            any(line.startswith("data:") and "Hub status x" in line
+                for line in received))
+
+
+class TestPostActions(WebGuiServerTestCase):
+
+    def test_post_unknown_action_returns_400(self) -> None:
+        status, body = self._post(
+            "/api/action", json.dumps({"action": "explode"}))
+        self.assertEqual(status, 400)
+        self.assertIn("error", json.loads(body))
+
+    def test_post_export_history_writes_txt_via_safe_transcript(self) -> None:
+        # Stub the viewer launch: no real `cmd start` window during tests.
+        with unittest.mock.patch.object(web_gui.subprocess, "Popen") as popen:
+            status, body = self._post(
+                "/api/action",
+                json.dumps({"action": "export-history",
+                            "name": self.history_md}))
+            popen.assert_called_once()
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body).get("ok"), True)
+        txt = os.path.join(self.transcripts_dir,
+                           self.history_md.replace(".md", ".txt"))
+        self.assertTrue(os.path.isfile(txt), "TXT not created")
+        with open(txt, encoding="utf-8") as fh:
+            self.assertIn("hola", fh.read())
+
+    def test_post_export_history_rejects_escape(self) -> None:
+        status, body = self._post(
+            "/api/action",
+            json.dumps({"action": "export-history", "name": "../bad.md"}))
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertFalse(payload.get("ok"))
+        self.assertIn("no", payload.get("error", "") + payload.get("error", ""))
+
+
+if __name__ == "__main__":
+    unittest.main()
