@@ -1,0 +1,10 @@
+# Pinned set: verified working together on Windows 11, Python 3.14
+# (see README "Instalación en una PC nueva"). Python 3.12+ required:
+# these pinned wheels need it.
+numpy==2.5.3
+faster-whisper==1.2.1
+ctranslate2==4.8.2
+scipy==1.18.1
+av==18.1.0
+soundcard==0.4.6
+PyAudioWPatch==0.2.12.8

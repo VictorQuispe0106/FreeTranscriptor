@@ -7,18 +7,30 @@ Corre 100% en la máquina — sin nube, sin API keys, sin cuenta.
 - **Modos:** audio del sistema (loopback), micrófono, o un archivo ya grabado
 - **Salida:** Markdown con timestamps, escrito en vivo a medida que hablás
 
-## Requisitos
+## Instalación en una PC nueva (desde GitHub)
 
-Ya están instalados en esta máquina (Python 3.14):
+Requisitos de la máquina:
 
-| Paquete | Rol |
+| Requisito | Por qué |
 |---|---|
-| `faster-whisper` + `ctranslate2` | reconocimiento de voz local |
-| `scipy` | resampling 48 kHz → 16 kHz |
-| `av` (PyAV) | decodificar mp3/m4a/ogg sin necesitar `ffmpeg` |
-| `soundcard`, `pyaudiowpatch` | captura WASAPI (loopback y micrófono) |
+| **Windows 11** | Live Captions ("Subtítulos en directo") es una función de Windows 11 |
+| **Python 3.12 o más nuevo** | las versiones pineadas de las dependencias lo necesitan; instalalo desde [python.org](https://www.python.org/downloads/) marcando *"Add python.exe to PATH"*, o con `winget install Python.Python.3.13` |
+| Internet **solo la primera vez** | para bajar las dependencias y el modelo de voz de Whisper (~100 MB); después todo corre offline |
 
-Modelos ya descargados: `tiny`, `base`, `small`. No hace falta internet para transcribir.
+Pasos:
+
+1. Cloná el repo (o descargá el ZIP y descomprimilo).
+2. Doble clic en **`Transcriptor App.bat`** (o **`Transcriptor Web.bat`**).
+   La primera vez el launcher solo: crea el entorno `.venv`, instala las
+   dependencias de `requirements.txt` (versiones pineadas, verificadas juntas)
+   y arranca. Las siguientes veces arranca directo.
+3. Si "Subtítulos en directo" no está activo, la app lo abre sola; si tu
+   Windows no lo tiene, activá **Win + Ctrl + L** o buscalo en
+   Configuración → Accesibilidad → Subtítulos.
+
+El **resumen con IA** usa el asistente Pi si lo tenés instalado (`pi` en el
+PATH); sin él, todo el resto de la app funciona igual y los botones de resumen
+quedan deshabilitados. Es opcional.
 
 ## Formas de arrancar
 
