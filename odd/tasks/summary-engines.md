@@ -25,9 +25,12 @@ habilitan si hay algún motor disponible.
 
 ## Tasks
 
-- T1 (S1-S4): `summarizer.py` + settings genéricos. Commit: pendiente.
-- T2 (S5): integración web. Commit: pendiente.
-- T3 (S6): README + suite + e2e + push. Commit: pendiente.
+- T1-T3 (S1-S6): un commit (`cc94384`, 850 líneas, rebanada grande por el
+  README completo + módulo nuevo).
+- L2 (verificación): 105 tests herméticos OK + e2e OK. Defecto encontrado y
+  corregido antes de pushear: el mock de pi_bridge.available en
+  test_summarizer._settings no se detenía y contaminaba test_web_gui en la
+  corrida completa (pasaba solo en aislado).
 
 ## Log
 
