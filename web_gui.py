@@ -21,7 +21,7 @@ import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import pi_bridge
 import app_settings
@@ -325,6 +325,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/history":
             self._json({"items": [name for name, _ in self.orchestrator.history]})
+            return
+        if path == "/api/historial-search":
+            query = parse_qs(urlsplit(self.path).query).get("q", [""])[0]
+            self._json({"items": transcriptor_app.search_transcripts(
+                TRANSCRIPTS_DIR, query)})
             return
         if path == "/api/resumen-text":
             orch = self.orchestrator

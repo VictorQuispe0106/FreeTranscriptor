@@ -50,6 +50,84 @@ class ListTranscriptsTests(unittest.TestCase):
         self.assertEqual(list_transcripts(os.path.join(tmp, "nope")), [])
 
 
+class SearchTranscriptsTests(unittest.TestCase):
+    """S3: global history search across session transcripts, newest first."""
+
+    def _write(self, path: str, text: str, mtime: float) -> None:
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        os.utime(path, (mtime, mtime))
+
+    def test_matches_across_sessions_newest_first_case_insensitive(self):
+        from transcriptor_app import search_transcripts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(os.path.join(tmp, "a_live-captions.md"),
+                        "# T\n\n- **[00:00:01]** hola\n"
+                        "- **[00:00:05]** palo alto firewall\n", 1000)
+            self._write(os.path.join(tmp, "b_live-captions.md"),
+                        "# T\n\n- **[00:01:00]** revisar PALO ALTO\n", 2000)
+            self._write(os.path.join(tmp, "b_live-captions.limpio.md"),
+                        "- **[00:00:01]** palo alto derivado\n", 3000)
+
+            found = search_transcripts(tmp, "palo")
+
+        self.assertEqual([item["name"] for item in found],
+                         ["b_live-captions.md", "a_live-captions.md"])
+        self.assertEqual(found[0]["matches"],
+                         [{"stamp": "00:01:00", "text": "revisar PALO ALTO"}])
+        self.assertEqual(found[1]["matches"],
+                         [{"stamp": "00:00:05", "text": "palo alto firewall"}])
+
+    def test_derived_files_and_snapshots_never_match(self):
+        from transcriptor_app import search_transcripts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(os.path.join(tmp, "a_live-captions.md"),
+                        "- **[00:00:01]** hola\n", 1000)
+            self._write(os.path.join(tmp, "a_live-captions.resumen.md"),
+                        "palo alto en el resumen\n", 1100)
+            self._write(os.path.join(tmp, "a_live-captions.limpio.md"),
+                        "palo alto en el limpio\n", 1200)
+            self._write(os.path.join(tmp, "notas.txt"), "palo alto txt\n", 1300)
+            os.makedirs(os.path.join(tmp, ".snapshots"))
+            self._write(os.path.join(tmp, ".snapshots", "deep.md"),
+                        "palo alto snapshot\n", 1400)
+
+            found = search_transcripts(tmp, "palo")
+
+        self.assertEqual(found, [])
+
+    def test_limit_caps_total_matches(self):
+        from transcriptor_app import search_transcripts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(os.path.join(tmp, "a_live-captions.md"),
+                        "".join(f"- **[00:00:{i:02d}]** hola {i}\n"
+                                for i in range(10)), 1000)
+            self._write(os.path.join(tmp, "b_live-captions.md"),
+                        "".join(f"- **[00:01:{i:02d}]** hola {i}\n"
+                                for i in range(10)), 2000)
+
+            found = search_transcripts(tmp, "hola", limit=12)
+
+        total = sum(len(item["matches"]) for item in found)
+        self.assertEqual(total, 12)
+        # Newest session keeps its 10; the older one gets cut at the cap.
+        self.assertEqual(len(found[0]["matches"]), 10)
+        self.assertEqual(len(found[1]["matches"]), 2)
+
+    def test_empty_needle_and_missing_directory_yield_nothing(self):
+        from transcriptor_app import search_transcripts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(os.path.join(tmp, "a_live-captions.md"),
+                        "- **[00:00:01]** hola\n", 1000)
+            self.assertEqual(search_transcripts(tmp, "   "), [])
+            self.assertEqual(search_transcripts(tmp, ""), [])
+        self.assertEqual(search_transcripts(os.path.join(tmp, "nope"), "h"), [])
+
+
 class AtEndTests(unittest.TestCase):
     """S2: scroll-down summary: the tail is only followed when already at the end."""
 

@@ -21,6 +21,7 @@ import threading
 import time
 import unittest
 import unittest.mock
+import urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
@@ -236,6 +237,32 @@ class _FakeSession:
 
     def stop(self, timeout_s: float = 5.0) -> None:
         self.stopped = True
+
+
+class TestHistorySearch(WebGuiServerTestCase):
+    """S3/S4: one GET returns every match, session newest first."""
+
+    def _search(self, query: str) -> tuple[int, dict]:
+        status, body = self._get(
+            "/api/historial-search?q=" + urllib.parse.quote(query))
+        return status, json.loads(body)
+
+    def test_search_returns_matches_from_history(self) -> None:
+        status, out = self._search("hola")
+        self.assertEqual(status, 200)
+        self.assertEqual(out["items"][0]["name"], self.history_md)
+        self.assertEqual(out["items"][0]["matches"],
+                         [{"stamp": "00:00:01", "text": "hola"}])
+
+    def test_search_without_needle_is_empty(self) -> None:
+        status, out = self._search("")
+        self.assertEqual(status, 200)
+        self.assertEqual(out["items"], [])
+
+    def test_search_with_no_hits_is_empty(self) -> None:
+        status, out = self._search("zzz-nada")
+        self.assertEqual(status, 200)
+        self.assertEqual(out["items"], [])
 
 
 class TestServerEvents(WebGuiServerTestCase):

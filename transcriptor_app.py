@@ -92,6 +92,39 @@ def list_transcripts(directory: str) -> list[tuple[str, str]]:
     return found
 
 
+def search_transcripts(directory: str, needle: str, limit: int = 200) -> list[dict]:
+    """S3: global full-text search across session transcripts.
+
+    Scans the same sessions ``list_transcripts`` returns (newest first, raw
+    ``*_live-captions.md`` only) and matches ``needle`` case-insensitively
+    against every utterance. Returns ``[{name, matches: [{stamp, text}]}]``
+    with at most ``limit`` matches in total, newest session first.
+    """
+    needle = (needle or "").strip().lower()
+    if not needle:
+        return []
+    results: list[dict] = []
+    total = 0
+    for name, path in list_transcripts(directory):
+        matches: list[dict] = []
+        try:
+            utterances = read_markdown(path)
+        except OSError:
+            continue
+        for utterance in utterances:
+            if needle not in utterance.text.lower():
+                continue
+            matches.append({"stamp": utterance.t, "text": utterance.text})
+            total += 1
+            if total >= limit:
+                break
+        if matches:
+            results.append({"name": name, "matches": matches})
+        if total >= limit:
+            break
+    return results
+
+
 def at_end(first: float, last: float) -> bool:
     """True when a yview tuple says the widget bottom is on screen.
 
@@ -356,9 +389,12 @@ class App(ttk.Frame):
             history, text="Resumir",
             command=lambda: self.run_summary(self._selected_history_path()),
             state="disabled")
+        self.btn_hist_search = ttk.Button(history, text="Buscar",
+                                          command=self.search_history)
         self.btn_hist_open.pack(side="left", padx=(0, 4))
         self.btn_hist_txt.pack(side="left", padx=(0, 4))
-        self.btn_hist_summary.pack(side="left")
+        self.btn_hist_summary.pack(side="left", padx=(0, 4))
+        self.btn_hist_search.pack(side="left")
 
         # S7: the transcript and the Pi summary never share one widget again.
         notebook = ttk.Notebook(self)
@@ -420,6 +456,71 @@ class App(ttk.Frame):
     def open_history(self) -> None:
         path = self._selected_history_path()
         if path:
+            os.startfile(path)  # noqa: S606 (local trusted path)
+
+    def search_history(self) -> None:
+        """S4: global history search dialog (Entry + results, open on dbl-click)."""
+        win = tk.Toplevel(self)
+        win.title("Buscar en el historial")
+        win.transient(self.winfo_toplevel())
+        var = tk.StringVar()
+        query_row = ttk.Frame(win)
+        query_row.pack(fill="x", padx=10, pady=(10, 6))
+        ttk.Label(query_row, text="Buscar:", style="Muted.TLabel").pack(
+            side="left", padx=(0, 6))
+        entry = ttk.Entry(query_row, textvariable=var)
+        entry.pack(side="left", fill="x", expand=True)
+        entry.focus_set()
+
+        result = ttk.Label(win, text="Escribí para buscar en todas las sesiones.",
+                           style="Muted.TLabel", wraplength=520, anchor="w")
+        result.pack(fill="x", padx=10)
+
+        listbox = tk.Listbox(
+            win, width=110, height=18, activestyle="dotbox",
+            bg=PALETTE["panel"], fg=PALETTE["text"], relief="flat",
+            selectbackground=PALETTE["tab_active"], font=("Segoe UI", 9))
+        listbox.pack(fill="both", expand=True, padx=10, pady=(6, 6))
+
+        actions = ttk.Frame(win)
+        actions.pack(fill="x", padx=10, pady=(0, 10))
+        open_btn = ttk.Button(actions, text="Abrir transcript",
+                              command=lambda: self._open_search_hit(listbox),
+                              state="disabled")
+        open_btn.pack(side="right")
+
+        self._search_hits: list[tuple[str, str]] = []
+
+        def refresh(_index=None, _mode=None) -> None:
+            needle = var.get()
+            items = search_transcripts(TRANSCRIPTS_DIR, needle)
+            self._search_hits = []
+            listbox.delete(0, "end")
+            for session in items:
+                for m in session["matches"]:
+                    stamp = m["stamp"] or "--:--:--"
+                    listbox.insert("end",
+                                   f"{session['name'].replace(_HISTORY_SUFFIX, '')}  "
+                                   f"[{stamp}]  {m['text']}")
+                    self._search_hits.append((session["name"], m["stamp"]))
+            count = len(self._search_hits)
+            result.configure(
+                text=(f"{count} coincidencia(s) en {len(items)} sesión(es)."
+                      if needle.strip() else
+                      "Escribí para buscar en todas las sesiones."))
+            open_btn.configure(state="normal" if count else "disabled")
+
+        var.trace_add("write", refresh)
+        listbox.bind("<Double-Button-1>",
+                     lambda _e: self._open_search_hit(listbox))
+
+    def _open_search_hit(self, listbox: tk.Listbox) -> None:
+        selection = listbox.curselection()
+        if not selection:
+            return
+        name = self._search_hits[selection[0]][0]
+        path = self._history_map.get(name)
+        if path and os.path.isfile(path):
             os.startfile(path)  # noqa: S606 (local trusted path)
 
     def export_history(self) -> None:

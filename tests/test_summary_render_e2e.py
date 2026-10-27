@@ -100,5 +100,41 @@ class TestSummaryRenderE2E(WebGuiServerTestCase):
                 browser.close()
 
 
+@unittest.skipUnless(os.environ.get("GENTLE_E2E") == "1",
+                     "e2e runs only with GENTLE_E2E=1")
+class TestHistorySearchE2E(WebGuiServerTestCase):
+    """S4: typing + Enter in the filter shows global results (no click, the
+    row's open action would launch a real file on this machine)."""
+
+    def _wait_for_sse_client(self) -> None:
+        hub = web_gui.Handler.hub
+        for _ in range(200):
+            if hub is not None and getattr(hub, "_clients", None):
+                return
+            time.sleep(0.05)
+        self.fail("the browser never registered on the hub")
+
+    def test_enter_in_filter_shows_search_results(self) -> None:
+        from playwright.sync_api import sync_playwright
+
+        url = f"http://{self.addr[0]}:{self.addr[1]}/"
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(channel="msedge", headless=True)
+            try:
+                page = browser.new_page()
+                page.goto(url)
+                self._wait_for_sse_client()
+                page.fill("#filterInput", "hola")
+                page.press("#filterInput", "Enter")
+                page.wait_for_selector(
+                    "#search-results:not(.hidden)", timeout=10000)
+                text = page.locator("#search-results").inner_text()
+                self.assertIn("2026_01_28_test", text)
+                self.assertIn("[00:00:01]", text)
+                self.assertIn("hola", text)
+            finally:
+                browser.close()
+
+
 if __name__ == "__main__":
     unittest.main()

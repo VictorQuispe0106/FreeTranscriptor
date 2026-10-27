@@ -243,7 +243,8 @@
 <div class="flex items-center space-x-2 pb-1">
 <div class="relative flex items-center">
 <span class="material-symbols-outlined absolute left-2 text-[14px] text-on-surface-variant">search</span>
-<input id="filterInput" class="bg-surface-container-low text-on-surface font-mono-timestamp text-mono-timestamp placeholder-on-surface-variant pl-7 pr-2 py-0.5 border border-outline-variant rounded focus:outline-none focus:border-primary-container w-44 md:w-56 text-xs" placeholder="Filtrar palabras o tags..." type="text"/>
+<input id="filterInput" class="bg-surface-container-low text-on-surface font-mono-timestamp text-mono-timestamp placeholder-on-surface-variant pl-7 pr-2 py-0.5 border border-outline-variant rounded focus:outline-none focus:border-primary-container w-44 md:w-56 text-xs" placeholder="Filtrar acá. Enter: buscar en todas las sesiones" type="text"/>
+<div id="search-results" class="hidden absolute top-full left-0 mt-1 w-[26rem] max-h-80 overflow-y-auto bg-surface-container border border-outline-variant rounded shadow-lg z-50"></div>
 </div>
 </div>
 </nav>
@@ -436,6 +437,84 @@
           notice(String(err), "error");
         }
       });
+  }
+
+  // --- global history search (S3/S4) -------------------------------------- //
+
+  function hideSearchResults() {
+    $("search-results").classList.add("hidden");
+  }
+
+  function doGlobalSearch() {
+    var q = $("filterInput").value.trim();
+    if (!q) {
+      hideSearchResults();
+      return;
+    }
+    fetch("/api/historial-search?q=" + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (out) { renderSearchResults(out.items || [], q); })
+      .catch(function (err) { notice(String(err), "error"); });
+  }
+
+  function renderSearchResults(items, q) {
+    var host = $("search-results");
+    host.textContent = "";
+    if (!items.length) {
+      var empty = document.createElement("div");
+      empty.className = "px-2 py-1.5 font-label-sm text-label-sm " +
+        "text-on-surface-variant";
+      empty.textContent = "Sin resultados para \"" + q + "\".";
+      host.appendChild(empty);
+    }
+    items.forEach(function (item) {
+      var session = (item.name || "").replace("_live-captions.md", "");
+      (item.matches || []).forEach(function (m) {
+        var row = document.createElement("button");
+        row.className = "w-full text-left px-2 py-1.5 flex items-start " +
+          "space-x-2 hover:bg-surface-container-high transition-colors " +
+          "duration-100 border-b border-outline-variant/40";
+        var sess = document.createElement("span");
+        sess.className = "font-mono-timestamp text-mono-timestamp " +
+          "text-outline shrink-0";
+        sess.textContent = session;
+        var stamp = document.createElement("span");
+        stamp.className = "font-mono-timestamp text-mono-timestamp " +
+          "text-primary-fixed-dim shrink-0";
+        stamp.textContent = "[" + (m.stamp || "--:--:--") + "]";
+        var text = document.createElement("span");
+        text.className = "font-mono-transcript text-mono-transcript " +
+          "text-on-surface flex-1";
+        text.textContent = m.text;
+        row.appendChild(sess);
+        row.appendChild(stamp);
+        row.appendChild(text);
+        row.addEventListener("click", function () {
+          hideSearchResults();
+          act("open", { "name": item.name });
+        });
+        host.appendChild(row);
+      });
+    });
+    host.classList.remove("hidden");
+  }
+
+  function wireGlobalSearch() {
+    $("filterInput").addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        doGlobalSearch();
+      } else if (ev.key === "Escape") {
+        hideSearchResults();
+      }
+    });
+    document.addEventListener("click", function (ev) {
+      var host = $("search-results");
+      if (host.classList.contains("hidden")) return;
+      if (ev.target && ev.target.id === "filterInput") return;
+      if (host.contains(ev.target)) return;
+      hideSearchResults();
+    });
   }
 
   function showTab(which) {
@@ -736,6 +815,7 @@
     wireHistoryButtons();
     wireCopyButtons();
     wireOpenLast();
+    wireGlobalSearch();
     showTab("transcripcion");           // default panel
     $("filterInput").addEventListener("input", applyFilter);
     $("tab-transcripcion").addEventListener("click",
