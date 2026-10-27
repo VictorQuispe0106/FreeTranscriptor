@@ -189,6 +189,25 @@ class TestServerEvents(WebGuiServerTestCase):
                 for line in received))
 
 
+class TestStaticAssets(WebGuiServerTestCase):
+
+    def test_summary_markdown_js_is_served(self) -> None:
+        status, body = self._get("/summary-markdown.js")
+        self.assertEqual(status, 200)
+        self.assertIn("renderSummaryMarkdown", body)
+
+    def test_index_references_summary_renderer(self) -> None:
+        status, body = self._get("/")
+        self.assertEqual(status, 200)
+        self.assertIn('src="summary-markdown.js"', body)
+
+    def test_resumen_text_without_session_returns_empty(self) -> None:
+        """No crash (500) when no transcript was opened yet: 8fb68aa lesson."""
+        status, body = self._get("/api/resumen-text")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"text": ""})
+
+
 class TestPostActions(WebGuiServerTestCase):
 
     def test_post_unknown_action_returns_400(self) -> None:

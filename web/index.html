@@ -295,6 +295,7 @@
 <span id="footer-sse">SSE: desconectado</span>
 </footer>
 </div>
+<script src="summary-markdown.js"></script>
 <script>
 (function () {
   "use strict";
@@ -406,6 +407,32 @@
   }
 
   // --- panels ------------------------------------------------------------ //
+
+  // --- summary rendering -------------------------------------------------- //
+
+  // The saved .resumen.md is authoritative: once the summary lands it is
+  // re-rendered as Markdown instead of leaving the raw delta stream. If the
+  // saved file cannot be fetched, the streamed text still gets rendered.
+  function renderSavedSummary(fallback) {
+    fetch("/api/resumen-text").then(function (r) { return r.json(); })
+      .then(function (out) {
+        var text = (out && out.text) || fallback || "";
+        if (!text) return;
+        window.renderSummaryMarkdown($("summary-log"), text);
+        var saved = document.createElement("p");
+        saved.className =
+          "text-on-surface-variant font-label-sm text-label-sm pt-1";
+        saved.textContent = "Resumen guardado.";
+        $("summary-log").appendChild(saved);
+      })
+      .catch(function (err) {
+        if (fallback) {
+          window.renderSummaryMarkdown($("summary-log"), fallback);
+        } else {
+          notice(String(err), "error");
+        }
+      });
+  }
 
   function showTab(which) {
     var transOn = which === "transcripcion";
@@ -611,6 +638,8 @@
       }
       case "summaryStarted": {
         showTab("resumen");
+        // A new run replaces whatever the panel showed before.
+        $("summary-log").textContent = "";
         $("resumen-indicator").className = "w-2 h-2 rounded-full " +
           "bg-primary-container animate-ping";
         break;
@@ -626,8 +655,7 @@
       case "summaryDone": {
         $("resumen-indicator").className = "w-1.5 h-1.5 rounded-full bg-outline";
         if (data.ok) {
-          $("summary-log").appendChild(
-            document.createTextNode("Resumen guardado.\n"));
+          renderSavedSummary($("summary-log").textContent);
         }
         break;
       }
@@ -710,6 +738,15 @@
         connectEvents();
       })
       .catch(function (err) { notice(String(err), "error"); });
+
+    // Show the last saved summary rendered when the page reopens.
+    fetch("/api/resumen-text").then(function (r) { return r.json(); })
+      .then(function (out) {
+        if (out && out.text) {
+          window.renderSummaryMarkdown($("summary-log"), out.text);
+        }
+      })
+      .catch(function () { /* cosmetic preload only */ });
   });
 })();
 </script>

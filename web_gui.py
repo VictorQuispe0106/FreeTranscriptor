@@ -292,6 +292,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/favicon.ico":
             self._send(204, b"", "image/x-icon")
             return
+        if path == "/summary-markdown.js":
+            try:
+                with open(os.path.join(WEB_DIR, "summary-markdown.js"),
+                          "rb") as fh:
+                    self._send(200, fh.read(),
+                               "application/javascript; charset=utf-8")
+            except OSError:
+                self._json({"error": "summary-markdown.js no encontrado"},
+                           404)
+            return
         if path == "/api/state":
             orch = self.orchestrator
             self._json({
@@ -307,8 +317,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/resumen-text":
             orch = self.orchestrator
+            if not orch.last_transcript:
+                self._json({"text": ""})
+                return
             resumen = Path(orch.last_transcript).with_suffix(".resumen.md")
-            if not orch.last_transcript or not resumen.exists():
+            if not resumen.exists():
                 self._json({"text": ""})
                 return
             self._json({"text": resumen.read_text(encoding="utf-8",
