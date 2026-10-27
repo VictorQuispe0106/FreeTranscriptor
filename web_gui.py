@@ -323,9 +323,6 @@ class Handler(BaseHTTPRequestHandler):
                 "autoSummary": app_settings.get_bool("auto_summary"),
             })
             return
-        if path == "/api/history":
-            self._json({"items": [name for name, _ in self.orchestrator.history]})
-            return
         if path == "/api/historial-search":
             query = parse_qs(urlsplit(self.path).query).get("q", [""])[0]
             self._json({"items": transcriptor_app.search_transcripts(
@@ -389,23 +386,20 @@ class Handler(BaseHTTPRequestHandler):
         source = orch.last_transcript
         if not source or not os.path.exists(source):
             return "Todavía no hay transcript para exportar."
-        try:
-            target = Path(source).with_suffix(".txt")
-            write_utf8(target, to_txt(read_markdown(source)))
-        except OSError as exc:
-            return f"No se pudo escribir el TXT: {exc}"
-        subprocess.Popen(["cmd", "/c", "start", "", str(target)],
-                         creationflags=CREATE_NO_WINDOW)
-        return ""
+        return self._write_txt_export(source)
 
     def _export_history(self, body: dict) -> str:
         """Same TXT export as _export_txt, for a history transcript only."""
         full = self._safe_transcript(str(body.get("name", "")))
         if not full:
             return "Archivo no válido."
+        return self._write_txt_export(full)
+
+    def _write_txt_export(self, source: str) -> str:
+        """Shared TXT export: write <source>.txt next to it and open it."""
         try:
-            target = Path(full).with_suffix(".txt")
-            write_utf8(target, to_txt(read_markdown(full)))
+            target = Path(source).with_suffix(".txt")
+            write_utf8(target, to_txt(read_markdown(source)))
         except OSError as exc:
             return f"No se pudo escribir el TXT: {exc}"
         subprocess.Popen(["cmd", "/c", "start", "", str(target)],

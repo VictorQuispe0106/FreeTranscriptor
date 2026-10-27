@@ -330,8 +330,30 @@ class TestStaticAssets(WebGuiServerTestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body), {"text": ""})
 
+    def test_api_history_route_is_gone(self) -> None:
+        """The dead /api/history endpoint was removed: nobody consumed it
+        (the front reads history from /api/state)."""
+        status, _ = self._get("/api/history")
+        self.assertEqual(status, 404)
+
 
 class TestPostActions(WebGuiServerTestCase):
+
+    def test_post_export_txt_writes_and_opens(self) -> None:
+        """Pre-existing behavior pinned while factoring the export helper."""
+        orch = web_gui.Handler.orchestrator
+        orch.last_transcript = os.path.join(self.transcripts_dir, self.history_md)
+        with unittest.mock.patch.object(web_gui.subprocess, "Popen") as popen:
+            status, body = self._post(
+                "/api/action", json.dumps({"action": "export-txt"}))
+            popen.assert_called_once()
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body).get("ok"))
+        txt = os.path.join(self.transcripts_dir,
+                           self.history_md.replace(".md", ".txt"))
+        self.assertTrue(os.path.isfile(txt), "TXT not created")
+        with open(txt, encoding="utf-8") as fh:
+            self.assertIn("hola", fh.read())
 
     def test_post_unknown_action_returns_400(self) -> None:
         status, body = self._post(

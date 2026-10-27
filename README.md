@@ -20,6 +20,17 @@ Ya están instalados en esta máquina (Python 3.14):
 
 Modelos ya descargados: `tiny`, `base`, `small`. No hace falta internet para transcribir.
 
+## Formas de arrancar
+
+| Archivo | Qué hace |
+|---|---|
+| `Transcriptor App.bat` | la app de escritorio (recomendado para el día a día) |
+| `Transcriptor Web.bat` | la misma app en el navegador (`http://127.0.0.1:8737`) |
+| `TRANSCRIBIR EN VIVO.bat` | modo crudo: corre solo el watcher contra Subtitulos en vivo, sin la app |
+
+El diseño de referencia de la interfaz (export original de Stitch) vive en
+`odd/design/index.stitch.html`.
+
 ## App (recomendado para usar todos los días)
 
 Vos no abrís nada: la app hace todo sola, sin tocar **Win+Ctrl+L**.

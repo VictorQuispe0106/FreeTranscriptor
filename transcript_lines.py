@@ -10,7 +10,6 @@ Windows Live Captions (``captions_watch.ps1``) and the faster-whisper engine
 
 from __future__ import annotations
 
-import os
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
