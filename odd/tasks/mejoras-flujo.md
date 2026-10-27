@@ -23,9 +23,9 @@ Dos mejoras de uso diario aprobadas por el usuario sobre el menú propuesto.
 
 ## Tasks
 
-- T1 (S1, S2): resumen automático al Parar — settings store + tkinter + web + tests. Commit: pendiente.
-- T2 (S3, S4): búsqueda global — backend compartido + web + tkinter + tests. Commit: pendiente.
-- T3 (S5): README + suite completa + e2e. Commit: pendiente.
+- T1 (S1, S2): resumen automático al Parar — settings store + tkinter + web + tests. Commit: `490b64c`.
+- T2 (S3, S4): búsqueda global — backend compartido + web + tkinter + tests + e2e. Commit: `00c061d`.
+- T3 (S5): README + suite completa + e2e. Commit: pendiente de este mismo commit docs.
 
 ## Log
 
@@ -34,3 +34,9 @@ Dos mejoras de uso diario aprobadas por el usuario sobre el menú propuesto.
   luego resumen automático al Parar y búsqueda global en el historial.
 - L3: Merge hecho: `main` fast-forward a `38bdeea` (incluye las 3 ramas y el
   fix del render Markdown del resumen); suite 75 tests OK en main.
+- L4: El commit de T1 (339 líneas) quedó dentro de la rebanada; T2 lo pasó de
+  ~400 líneas acumuladas en la rama: T3 cierra el feature y la rebanada.
+- L5: Estado final verificado: 93 tests herméticos OK (3 skips esperados) + 2
+  e2e Playwright OK (resumen Markdown renderizado y búsqueda global en la UI).
+  Feature completo en `feature/mejoras-flujo`; el merge a main es decisión del
+  usuario, igual que el push.

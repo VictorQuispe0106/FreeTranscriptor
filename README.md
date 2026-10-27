@@ -37,8 +37,13 @@ Doble clic en **`Transcriptor App.bat`** (o `py transcriptor_app.py`).
    transcribiendo*: no corta la sesión ni toca los botones de transcripción.
 8. **Copiar / Copiar resumen** - manda el transcript (o el resumen) al portapapeles para
    pegar directo en Teams o en un mail.
-9. **Historial** - lista los `*_live-captions.md` anteriores de `transcripts\`; con
-   **Abrir**, **TXT** y **Resumir** sobre el que elijas, sin salir de la app.
+9. **Resumen al parar** - checkbutton persistente (queda guardado entre sesiones en
+   `transcriptor_config.json`): cuando está marcado, **Parar** arranca el resumen con
+   Pi solo, sobre la sesión recién cerrada. Cerrar la app no lo dispara nunca.
+10. **Historial** - lista los `*_live-captions.md` anteriores de `transcripts\`; con
+   **Abrir**, **TXT**, **Resumir** y **Buscar** sobre lo que elijas, sin salir de la app.
+   **Buscar** abre un diálogo de búsqueda global: busca en TODAS las sesiones a medida que
+   escribís (sin distinguir mayúsculas) y abre el transcript con doble click.
 
 Cada sesión guarda en `transcripts\<fecha>_live-captions.md`. La ventana usa un tema
 oscuro (diseño generado con Stitch, paleta near-black + turquesa). Los timestamps del
@@ -55,7 +60,10 @@ Mismo motor, misma pipeline: solo cambia la piel. Doble clic en **`Transcriptor 
 navegador solo. Todo lo que hace la app tkinter lo hace acá, **más fluido**: el
 transcript se renderiza con el HTML de Stitch tal cual (el look exacto del diseño),
 con pestañas **Transcripción / Resumen (Pi)**, historial con selector, filtro de
-palabras en vivo y banner de **Reanudar** si la ventana de Subtítulos se cae.
+palabras en vivo (Enter = búsqueda global en todas las sesiones, con resultados
+abriendo el transcript con un click) y banner de **Reanudar** si la ventana de
+Subtítulos se cae. En la barra de resumen vive el toggle **Auto**: marcado, al cortar
+la sesión el resumen con Pi sale solo (el ajuste es el mismo que el de la app tkinter).
 
 - **Empuje real**: las líneas llegan por SSE apenas el watcher las emite (sin
   polling del navegador; latencia ≈ tkinter).
@@ -79,7 +87,9 @@ palabras en vivo y banner de **Reanudar** si la ventana de Subtítulos se cae.
 - Guarda una copia exacta de lo resumido en `transcripts\.snapshots\`.
 - Podés **Cancelar** en cualquier momento; el transcript crudo y el limpio nunca se tocan.
 - El proceso de Pi corre contenido (solo lectura de archivos). No consume keys, no usa sesión,
-  no instala nada; sí consume los tokens de tu plan de Pi, por eso es siempre a botón.
+  no instala nada; sí consume los tokens de tu plan de Pi, por eso es siempre a botón
+  (o con el toggle **Resumen al parar** / **Auto**, que es la única excepción: sale solo
+  cuando vos cortás la sesión).
 
 ## Modo Live Captions (recomendado: funciona hoy)
 
