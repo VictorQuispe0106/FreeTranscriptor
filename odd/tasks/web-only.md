@@ -16,9 +16,11 @@ solo la versión web de la app; la GUI tkinter y el modo crudo se eliminan.
 
 ## Tasks
 
-- T1 (S1): extracción del core. Commit: pendiente.
-- T2 (S2, S3): bats + README. Commit: pendiente.
-- T3 (S4): suite + e2e + push. Commit: pendiente.
+- T1 (S1): extracción del core. Commit: `6c50929` (rebanada grande: -530
+  líneas de GUI tkinter + renames; deletions dominan el diff).
+- T2 (S2, S3): bats + README. Commit: `6c50929` (misma unidad).
+- T3 (S4): suite 92 tests OK + e2e OK + imports verificados desde el venv;
+  push a origin.
 
 ## Log
 
