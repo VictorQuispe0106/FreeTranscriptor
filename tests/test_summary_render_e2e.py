@@ -136,5 +136,38 @@ class TestHistorySearchE2E(WebGuiServerTestCase):
                 browser.close()
 
 
+@unittest.skipUnless(os.environ.get("GENTLE_E2E") == "1",
+                     "e2e runs only with GENTLE_E2E=1")
+class TestReopenShowsLastResumenE2E(WebGuiServerTestCase):
+    """User-reported bug: after a server restart the Resumen tab stayed
+    empty even though a .resumen.md existed. The boot preload must render
+    the newest saved resumen."""
+
+    def test_reopen_renders_newest_saved_resumen(self) -> None:
+        resumen = os.path.join(self.transcripts_dir,
+                               self.history_md.replace(".md", ".resumen.md"))
+        with open(resumen, "w", encoding="utf-8") as fh:
+            fh.write("## Resumen\nReunion de prueba.\n\n"
+                     "## Acciones\n\n| Que | Quien |\n|---|---|\n"
+                     "| Aplicar perfiles | Ernesto |\n")
+        from playwright.sync_api import sync_playwright
+
+        url = f"http://{self.addr[0]}:{self.addr[1]}/"
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(channel="msedge", headless=True)
+            try:
+                page = browser.new_page()
+                page.goto(url)
+                page.click("#tab-resumen")
+                page.wait_for_selector("#summary-log h3", timeout=10000)
+                self.assertIn("Resumen", page.locator("#summary-log h3")
+                              .all_inner_texts())
+                self.assertEqual(
+                    page.locator("#summary-log table th").all_inner_texts(),
+                    ["Que", "Quien"])
+            finally:
+                browser.close()
+
+
 if __name__ == "__main__":
     unittest.main()

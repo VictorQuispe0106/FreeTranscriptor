@@ -339,8 +339,19 @@ class TestStaticAssets(WebGuiServerTestCase):
         self.assertEqual(status, 200)
         self.assertIn('src="summary-markdown.js"', body)
 
-    def test_resumen_text_without_session_returns_empty(self) -> None:
-        """No crash (500) when no transcript was opened yet: 8fb68aa lesson."""
+    def test_resumen_text_falls_back_to_newest_saved_resumen(self) -> None:
+        """After a server restart last_transcript is empty: the Resumen tab
+        must still show the newest saved resumen (user-reported bug)."""
+        resumen = os.path.join(self.transcripts_dir,
+                               self.history_md.replace(".md", ".resumen.md"))
+        with open(resumen, "w", encoding="utf-8") as fh:
+            fh.write("## Resumen\nreunion de prueba\n")
+        status, body = self._get("/api/resumen-text")
+        self.assertEqual(status, 200)
+        self.assertIn("reunion de prueba", json.loads(body)["text"])
+
+    def test_resumen_text_without_any_resumen_is_empty(self) -> None:
+        """No crash (500) and no phantom text when nothing was saved yet."""
         status, body = self._get("/api/resumen-text")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body), {"text": ""})

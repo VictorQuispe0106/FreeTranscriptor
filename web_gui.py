@@ -336,12 +336,8 @@ class Handler(BaseHTTPRequestHandler):
                 TRANSCRIPTS_DIR, query)})
             return
         if path == "/api/resumen-text":
-            orch = self.orchestrator
-            if not orch.last_transcript:
-                self._json({"text": ""})
-                return
-            resumen = Path(orch.last_transcript).with_suffix(".resumen.md")
-            if not resumen.exists():
+            resumen = self._resumen_path()
+            if not resumen:
                 self._json({"text": ""})
                 return
             self._json({"text": resumen.read_text(encoding="utf-8",
@@ -387,6 +383,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": error}, 400)
             return
         self._json({"ok": not error, "error": error} if error else {"ok": True})
+
+    def _resumen_path(self) -> Path | None:
+        """The resumen to show in the Resumen tab: the live session's, or the
+        newest saved one (last_transcript resets on every server restart)."""
+        orch = self.orchestrator
+        if orch.last_transcript:
+            candidate = Path(orch.last_transcript).with_suffix(".resumen.md")
+            if candidate.exists():
+                return candidate
+        for _, path in transcriptor_core.list_transcripts(TRANSCRIPTS_DIR):
+            candidate = Path(path).with_suffix(".resumen.md")
+            if candidate.exists():
+                return candidate
+        return None
 
     def _export_txt(self) -> str:
         orch = self.orchestrator
