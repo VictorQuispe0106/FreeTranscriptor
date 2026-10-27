@@ -20,7 +20,7 @@ Requisitos de la máquina:
 Pasos:
 
 1. Cloná el repo (o descargá el ZIP y descomprimilo).
-2. Doble clic en **`Transcriptor App.bat`** (o **`Transcriptor Web.bat`**).
+2. Doble clic en **`FreeTranscriptor.bat`**.
    La primera vez el launcher solo: crea el entorno `.venv`, instala las
    dependencias de `requirements.txt` (versiones pineadas, verificadas juntas)
    y arranca. Las siguientes veces arranca directo.
@@ -36,21 +36,23 @@ quedan deshabilitados. Es opcional.
 
 | Archivo | Qué hace |
 |---|---|
-| `Transcriptor App.bat` | la app de escritorio (recomendado para el día a día) |
-| `Transcriptor Web.bat` | la misma app en el navegador (`http://127.0.0.1:8737`) |
-| `TRANSCRIBIR EN VIVO.bat` | modo crudo: corre solo el watcher contra Subtitulos en vivo, sin la app |
+| `FreeTranscriptor.bat` | la app: levanta el server local y abre el navegador (bootstrap de `.venv` la primera vez) |
 
 El diseño de referencia de la interfaz (export original de Stitch) vive en
 `odd/design/index.stitch.html`.
 
-## App (recomendado para usar todos los días)
+## La app (un solo launcher)
 
 Vos no abrís nada: la app hace todo sola, sin tocar **Win+Ctrl+L**.
+Doble clic en **`FreeTranscriptor.bat`** — levanta un servidor local
+(`web_gui.py`) en `http://127.0.0.1:8737`, abre el navegador solo y muestra el
+transcript con el diseño Stitch tal cual (paleta near-black + turquesa), con
+pestañas **Transcripción / Resumen (Pi)**.
 
-Doble clic en **`Transcriptor App.bat`** (o `py transcriptor_app.py`).
+Controles:
 
 1. **Transcribir** - abre Live Captions sola si no está corriendo, empieza a escribir
-   el transcript y te muestra las líneas en la ventana.
+   el transcript y te muestra las líneas en el navegador.
 2. **Parar** - corta la grabación; Live Captions queda abierto para la próxima.
 3. **Abrir transcript** - abre el `.md` del que se escribió en esa sesión.
 4. **Exportar TXT** - escribe el texto plano con timestamps (`[hh:mm:ss] frase`) y lo abre.
@@ -60,41 +62,29 @@ Doble clic en **`Transcriptor App.bat`** (o `py transcriptor_app.py`).
    transcribiendo*: no corta la sesión ni toca los botones de transcripción.
 8. **Copiar / Copiar resumen** - manda el transcript (o el resumen) al portapapeles para
    pegar directo en Teams o en un mail.
-9. **Resumen al parar** - checkbutton persistente (queda guardado entre sesiones en
+9. **Auto** - toggle persistente (queda guardado entre sesiones en
    `transcriptor_config.json`): cuando está marcado, **Parar** arranca el resumen con
-   Pi solo, sobre la sesión recién cerrada. Cerrar la app no lo dispara nunca.
+   Pi solo, sobre la sesión recién cerrada. Cerrar el server no lo dispara nunca.
 10. **Historial** - lista los `*_live-captions.md` anteriores de `transcripts\`; con
-   **Abrir**, **TXT**, **Resumir** y **Buscar** sobre lo que elijas, sin salir de la app.
-   **Buscar** abre un diálogo de búsqueda global: busca en TODAS las sesiones a medida que
-   escribís (sin distinguir mayúsculas) y abre el transcript con doble click.
+   **Abrir**, **TXT** y **Resumir** sobre el que elijas, sin salir de la app.
+11. **Filtro / Buscar** - el filtro busca en la sesión viva mientras escribís;
+   con **Enter** busca en TODAS las sesiones (sin distinguir mayúsculas) y un click
+   en el resultado abre ese transcript.
 
-Cada sesión guarda en `transcripts\<fecha>_live-captions.md`. La ventana usa un tema
-oscuro (diseño generado con Stitch, paleta near-black + turquesa). Los timestamps del
-archivo son de **hora real** (reloj de pared), así que la primera tanda de líneas ya no
-sale como una ráfaga de `00:00:00`. Si la ventana de Subtítulos se cierra en plena
-reunión, la app lo detecta y ofrece **reiniciar en el mismo archivo** (sin duplicar
-líneas). La app tampoco lee otra instancia vieja de Live Captions: fija el PID de la
-que abrió.
-
-## App web (diseño Stitch, nuevo)
-
-Mismo motor, misma pipeline: solo cambia la piel. Doble clic en **`Transcriptor Web.bat`
-** — levanta un servidor local (`web_gui.py`) en `http://127.0.0.1:8737` y abre el
-navegador solo. Todo lo que hace la app tkinter lo hace acá, **más fluido**: el
-transcript se renderiza con el HTML de Stitch tal cual (el look exacto del diseño),
-con pestañas **Transcripción / Resumen (Pi)**, historial con selector, filtro de
-palabras en vivo (Enter = búsqueda global en todas las sesiones, con resultados
-abriendo el transcript con un click) y banner de **Reanudar** si la ventana de
-Subtítulos se cae. En la barra de resumen vive el toggle **Auto**: marcado, al cortar
-la sesión el resumen con Pi sale solo (el ajuste es el mismo que el de la app tkinter).
+Detalles de la pipeline:
 
 - **Empuje real**: las líneas llegan por SSE apenas el watcher las emite (sin
-  polling del navegador; latencia ≈ tkinter).
+  polling del navegador).
 - **Solo escucha en 127.0.0.1**: no expone nada a la red.
 - **Sin dependencias nuevas**: `http.server` de la stdlib; el primer render carga
   Tailwind/Google Fonts de CDN (con internet), el transcript sigue siendo 100% local.
 - Puerto configurable con la variable `TRANSCRIPTOR_PORT` (default 8737).
-- La app tkinter sigue funcionando igual: dos frentes, un mismo watcher.
+- Cada sesión guarda en `transcripts\<fecha>_live-captions.md`. Los timestamps del
+  archivo son de **hora real** (reloj de pared), así que la primera tanda de líneas ya no
+  sale como una ráfaga de `00:00:00`.
+- Si la ventana de Subtítulos se cierra en plena reunión, la app lo detecta y ofrece
+  **reiniciar en el mismo archivo** (sin duplicar líneas). Tampoco lee otra instancia
+  vieja de Live Captions: fija el PID de la que abrió.
 
 ## Resumen con IA (Pi local, sin API keys)
 

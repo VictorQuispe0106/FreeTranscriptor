@@ -1,9 +1,9 @@
-"""Tiny persisted settings shared by the tkinter app and the web GUI.
+"""Tiny persisted settings for the app (shared by every front).
 
 One JSON file (``transcriptor_config.json``, gitignored) with atomic writes:
 write to a temp file in the same directory, then ``os.replace``. A missing or
-corrupt file falls back to defaults instead of crashing either front on
-startup. Tests point ``CONFIG_PATH`` at a temp file.
+corrupt file falls back to defaults instead of crashing on startup. Tests
+point ``CONFIG_PATH`` at a temp file.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ import json
 import os
 import threading
 
-# Same directory as transcriptor_app.py on purpose: depending on that module
-# would make the import circular (transcriptor_app imports this back).
+# Same directory as the other project modules; no circular dependency:
+# nothing here imports back into the core.
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 CONFIG_PATH = os.path.join(PROJECT_DIR, "transcriptor_config.json")

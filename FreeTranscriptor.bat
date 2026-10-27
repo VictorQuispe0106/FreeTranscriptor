@@ -1,6 +1,6 @@
 @echo off
-title Transcriptor Web GUI
-rem Launches the local web GUI server; it opens the browser itself.
+title Transcriptor en vivo
+rem Launches the app: a local web server that opens the browser itself.
 rem First run bootstraps the project .venv and installs requirements.txt.
 rem Keep the console open: closing it stops the server (Ctrl+C also works).
 setlocal

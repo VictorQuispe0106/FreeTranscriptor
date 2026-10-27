@@ -24,7 +24,7 @@ class ListTranscriptsTests(unittest.TestCase):
         os.utime(path, (mtime, mtime))
 
     def test_lists_only_session_md_newest_first(self):
-        from transcriptor_app import list_transcripts
+        from transcriptor_core import list_transcripts
 
         with tempfile.TemporaryDirectory() as tmp:
             self._touch(os.path.join(tmp, "a_live-captions.md"), 1000)
@@ -43,7 +43,7 @@ class ListTranscriptsTests(unittest.TestCase):
                          ["b_live-captions.md", "a_live-captions.md"])
 
     def test_empty_and_missing_directory_yield_nothing(self):
-        from transcriptor_app import list_transcripts
+        from transcriptor_core import list_transcripts
 
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(list_transcripts(tmp), [])
@@ -59,7 +59,7 @@ class SearchTranscriptsTests(unittest.TestCase):
         os.utime(path, (mtime, mtime))
 
     def test_matches_across_sessions_newest_first_case_insensitive(self):
-        from transcriptor_app import search_transcripts
+        from transcriptor_core import search_transcripts
 
         with tempfile.TemporaryDirectory() as tmp:
             self._write(os.path.join(tmp, "a_live-captions.md"),
@@ -80,7 +80,7 @@ class SearchTranscriptsTests(unittest.TestCase):
                          [{"stamp": "00:00:05", "text": "palo alto firewall"}])
 
     def test_derived_files_and_snapshots_never_match(self):
-        from transcriptor_app import search_transcripts
+        from transcriptor_core import search_transcripts
 
         with tempfile.TemporaryDirectory() as tmp:
             self._write(os.path.join(tmp, "a_live-captions.md"),
@@ -99,7 +99,7 @@ class SearchTranscriptsTests(unittest.TestCase):
         self.assertEqual(found, [])
 
     def test_limit_caps_total_matches(self):
-        from transcriptor_app import search_transcripts
+        from transcriptor_core import search_transcripts
 
         with tempfile.TemporaryDirectory() as tmp:
             self._write(os.path.join(tmp, "a_live-captions.md"),
@@ -118,7 +118,7 @@ class SearchTranscriptsTests(unittest.TestCase):
         self.assertEqual(len(found[1]["matches"]), 2)
 
     def test_empty_needle_and_missing_directory_yield_nothing(self):
-        from transcriptor_app import search_transcripts
+        from transcriptor_core import search_transcripts
 
         with tempfile.TemporaryDirectory() as tmp:
             self._write(os.path.join(tmp, "a_live-captions.md"),
@@ -128,27 +128,11 @@ class SearchTranscriptsTests(unittest.TestCase):
         self.assertEqual(search_transcripts(os.path.join(tmp, "nope"), "h"), [])
 
 
-class AtEndTests(unittest.TestCase):
-    """S2: scroll-down summary: the tail is only followed when already at the end."""
-
-    def test_at_bottom_is_true(self):
-        from transcriptor_app import at_end
-
-        self.assertTrue(at_end(0.99, 1.0))
-        self.assertTrue(at_end(1.0, 1.0))
-
-    def test_scrolled_up_is_false(self):
-        from transcriptor_app import at_end
-
-        self.assertFalse(at_end(0.4, 0.8))
-        self.assertFalse(at_end(0.0, 0.0))
-
-
 class WatcherSessionStartTests(unittest.TestCase):
     """S5/S6: the watcher process is spawned with the exact pinned options."""
 
     def _spawn_capture(self):
-        import transcriptor_app
+        import transcriptor_core
 
         recorded = {}
 
@@ -160,20 +144,20 @@ class WatcherSessionStartTests(unittest.TestCase):
             terminate = lambda self: None
             kill = lambda self: None
 
-        original = transcriptor_app.subprocess.Popen
+        original = transcriptor_core.subprocess.Popen
 
         def fake(cmd, *args, **kwargs):
             recorded["cmd"] = cmd
             return FakeProc()
 
-        transcriptor_app.subprocess.Popen = fake
+        transcriptor_core.subprocess.Popen = fake
         try:
-            session = transcriptor_app.WatcherSession(
+            session = transcriptor_core.WatcherSession(
                 lambda text: None, lambda status: None, lambda message: None)
             session.start(out_path="\\somewhere\\out.md", captions_pid=1234)
             session.stop()
         finally:
-            transcriptor_app.subprocess.Popen = original
+            transcriptor_core.subprocess.Popen = original
         return session, recorded["cmd"]
 
     def test_custom_out_path_is_used(self):
@@ -188,7 +172,7 @@ class WatcherSessionStartTests(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("-CaptionsPid") + 1], "1234")
 
     def test_no_pin_when_pid_unknown(self):
-        import transcriptor_app
+        import transcriptor_core
 
         recorded = {}
 
@@ -200,20 +184,20 @@ class WatcherSessionStartTests(unittest.TestCase):
             terminate = lambda self: None
             kill = lambda self: None
 
-        original = transcriptor_app.subprocess.Popen
+        original = transcriptor_core.subprocess.Popen
 
         def fake(cmd, *args, **kwargs):
             recorded["cmd"] = cmd
             return FakeProc()
 
-        transcriptor_app.subprocess.Popen = fake
+        transcriptor_core.subprocess.Popen = fake
         try:
-            session = transcriptor_app.WatcherSession(
+            session = transcriptor_core.WatcherSession(
                 lambda text: None, lambda status: None, lambda message: None)
             session.start(captions_pid=0)
             session.stop()
         finally:
-            transcriptor_app.subprocess.Popen = original
+            transcriptor_core.subprocess.Popen = original
         self.assertNotIn("-CaptionsPid", recorded["cmd"])
 
 
@@ -227,43 +211,6 @@ class WallClockStampTests(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertEqual(lines[0].t, "14:03:12")
         self.assertEqual(lines[0].text, "La entrega es el jueves.")
-
-
-class TranscriptCopyTests(unittest.TestCase):
-    """S3: copy puts exactly the displayed meeting text on the clipboard."""
-
-    def test_copy_strips_virtual_marker_and_trailing_newline(self):
-        from transcriptor_app import copyable_line
-
-        self.assertEqual(copyable_line("[12:00:01] hola\n"), "[12:00:01] hola")
-        self.assertEqual(copyable_line("[12:00:01] \u25b8 aho\n"),
-                         "[12:00:01] \u25b8 aho")
-
-    def test_copy_accepts_blank_widget(self):
-        from transcriptor_app import copyable_line
-
-        self.assertEqual(copyable_line(""), "")
-        self.assertEqual(copyable_line("\n"), "")
-
-
-class ThemeTests(unittest.TestCase):
-    """T10: the Stitch visual identity is applied through ttk styles."""
-
-    def test_dark_theme_is_applied(self):
-        import tkinter as tk
-        import transcriptor_app
-
-        root = tk.Tk()
-        root.withdraw()
-        try:
-            transcriptor_app.apply_theme(root)
-            style = transcriptor_app.ttk.Style(root)
-            self.assertEqual(root.cget("bg"),
-                             transcriptor_app.PALETTE["bg"])
-            self.assertEqual(style.lookup("Accent.TButton", "background"),
-                             transcriptor_app.PALETTE["accent"])
-        finally:
-            root.destroy()
 
 
 if __name__ == "__main__":

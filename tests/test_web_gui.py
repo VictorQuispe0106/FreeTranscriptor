@@ -28,7 +28,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 web_gui = importlib.import_module("web_gui")
-transcriptor_app = importlib.import_module("transcriptor_app")
+transcriptor_core = importlib.import_module("transcriptor_core")
 app_settings = importlib.import_module("app_settings")
 pi_bridge = importlib.import_module("pi_bridge")
 
@@ -430,7 +430,7 @@ class TestStartLaunchesCaptions(unittest.TestCase):
             recorded["cmd"] = cmd
             return FakeProc()
 
-        with _Restore(transcriptor_app.subprocess, Popen=fake_popen):
+        with _Restore(transcriptor_core.subprocess, Popen=fake_popen):
             with _Restore(self.web_gui, launch_livecaptions=lambda: 4321):
                 orch = self.web_gui.Orchestrator(self.hub)
                 self.assertEqual(orch.start(), "")

@@ -1,5 +1,5 @@
 """Tests for the persisted app settings store (S1) and the auto-summary
-decision helper shared by the tkinter app and the web GUI (S2).
+decision helper shared by the web GUI (S2).
 
 The store is one JSON file with atomic writes; a missing or corrupt file
 falls back to defaults so neither front ever crashes on startup.
@@ -68,7 +68,7 @@ class AutoSummaryDueTests(unittest.TestCase):
     """S2: the only decision inputs are toggle, transcript and Pi."""
 
     def test_true_only_with_all_conditions(self) -> None:
-        from transcriptor_app import auto_summary_due
+        from transcriptor_core import auto_summary_due
 
         existing = os.path.join(self._tmp(), "x.md")
         with open(existing, "w", encoding="utf-8"):

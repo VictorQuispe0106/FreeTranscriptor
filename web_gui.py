@@ -1,13 +1,12 @@
 """Web GUI for the live transcriptor: local server + SSE, Stitch design.
 
-Browser front reproducing the Stitch screen as-is; the watcher pipeline is
-shared verbatim with the tkinter app:
+Browser front over the shared core (transcriptor_core):
 
-  captions_watch.ps1 (unchanged) -> WatcherSession (unchanged) -> this server
-  -> SSE push -> browser rendering of the Stitch HTML.
+  captions_watch.ps1 (unchanged) -> WatcherSession (transcriptor_core) ->
+  this server -> SSE push -> browser rendering of the Stitch HTML.
 
 No new dependencies: http.server + queues + browser EventSource. Binds to
-127.0.0.1 only. The tkinter app keeps working as the alternative front.
+127.0.0.1 only.
 """
 
 from __future__ import annotations
@@ -28,8 +27,8 @@ import app_settings
 from fluidez import clean
 from transcript_lines import parse_markdown, read_markdown, to_txt, write_utf8
 
-import transcriptor_app
-from transcriptor_app import (PROJECT_DIR, SNAPSHOTS_DIR, TRANSCRIPTS_DIR,
+import transcriptor_core
+from transcriptor_core import (PROJECT_DIR, SNAPSHOTS_DIR, TRANSCRIPTS_DIR,
                               WatcherSession, auto_summary_due,
                               launch_livecaptions, list_transcripts,
                               render_limpio, render_resumen)
@@ -135,8 +134,8 @@ class Orchestrator:
 
     def _start_worker(self, resume: bool) -> None:
         try:
-            # Launch and PIN the exact Live Captions instance, like the
-            # tkinter app does; without this the watcher's startup check
+            # Launch and PIN the exact Live Captions instance; without this
+            # the watcher's startup check
             # fails with exit 1 whenever none was already running.
             pid = launch_livecaptions() or 0
             if not pid:
@@ -325,7 +324,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/historial-search":
             query = parse_qs(urlsplit(self.path).query).get("q", [""])[0]
-            self._json({"items": transcriptor_app.search_transcripts(
+            self._json({"items": transcriptor_core.search_transcripts(
                 TRANSCRIPTS_DIR, query)})
             return
         if path == "/api/resumen-text":
