@@ -20,7 +20,14 @@ CONFIG_PATH = os.path.join(PROJECT_DIR, "transcriptor_config.json")
 
 _LOCK = threading.Lock()
 
-_DEFAULTS: dict = {"auto_summary": False}
+_DEFAULTS: dict = {
+    "auto_summary": False,
+    "summary_backend": "auto",
+    "ollama_model": "llama3.1:8b",
+    "cloud_base_url": "",
+    "cloud_model": "gpt-4o-mini",
+    "cloud_api_key": "",
+}
 
 
 def load() -> dict:
@@ -38,17 +45,32 @@ def load() -> dict:
     return data
 
 
+def get(key: str, default=None):
+    """Generic getter for non-boolean settings (strings)."""
+    data = load()
+    value = data.get(key, default)
+    return value if value is not None else default
+
+
 def get_bool(key: str) -> bool:
     return bool(load().get(key))
 
 
-def set_bool(key: str, value: bool) -> None:
+def set(key: str, value) -> None:
     if key not in _DEFAULTS:
         raise KeyError(f"setting desconocido: {key}")
     with _LOCK:
         data = load()
-        data[key] = bool(value)
-        tmp = CONFIG_PATH + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp, CONFIG_PATH)
+        data[key] = value
+        _write(data)
+
+
+def set_bool(key: str, value: bool) -> None:
+    set(key, bool(value))
+
+
+def _write(data: dict) -> None:
+    tmp = CONFIG_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, CONFIG_PATH)

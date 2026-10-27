@@ -23,6 +23,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pi_bridge
+import summarizer
 import app_settings
 from fluidez import clean
 from transcript_lines import parse_markdown, read_markdown, to_txt, write_utf8
@@ -88,11 +89,15 @@ class Orchestrator:
         self.hub.publish({"type": "status", "text": text})
 
     def publish_state(self) -> None:
+        engines = summarizer.available_engines()
+        label = summarizer.engine_label(engines)
         self.hub.publish({
             "type": "state",
             "transcribing": self.session is not None,
             "summaryRunning": self.summary_cancel is not None,
-            "piAvailable": pi_bridge.available(),
+            "engines": engines,
+            "engineLabel": label,
+            "summaryAvailable": label != "sin motor",
         })
 
     def refresh_history(self) -> None:
@@ -125,7 +130,6 @@ class Orchestrator:
             self.starting = True
         self.hub.publish({"type": "state", "transcribing": False,
                           "summaryRunning": self.summary_cancel is not None,
-                          "piAvailable": pi_bridge.available(),
                           "starting": True})
         self.hub.publish({"type": "status", "text": "Abriendo Subtitulos en vivo..."})
         threading.Thread(target=self._start_worker, args=(resume,),
@@ -227,7 +231,7 @@ class Orchestrator:
                 "type": "summaryProgress",
                 "text": f"Texto limpio: {len(utterances)} -> {len(polished)} "
                         "lineas. Pi esta resumiendo..."})
-            summary = pi_bridge.summarize(
+            summary = summarizer.summarize(
                 derived["limpio"], on_delta=lambda d: self.hub.publish(
                     {"type": "summaryDelta", "text": d.rstrip()}),
                 cancel_event=cancel)
@@ -313,13 +317,17 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/state":
             orch = self.orchestrator
+            engines = summarizer.available_engines()
+            label = summarizer.engine_label(engines)
             self._json({
                 "transcribing": orch.session is not None,
                 "summaryRunning": orch.summary_cancel is not None,
-                "piAvailable": pi_bridge.available(),
                 "status": orch.status,
                 "history": [name for name, _ in orch.history],
                 "autoSummary": app_settings.get_bool("auto_summary"),
+                "engines": engines,
+                "engineLabel": label,
+                "summaryAvailable": label != "sin motor",
             })
             return
         if path == "/api/historial-search":

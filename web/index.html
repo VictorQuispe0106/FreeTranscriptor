@@ -203,8 +203,9 @@
 <div class="flex items-center space-x-1.5 flex-wrap">
 <button id="btn-summary" class="bg-surface-container-high text-primary-container hover:bg-surface-container-highest border border-secondary-container/40 active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm font-semibold px-2.5 py-1 flex items-center space-x-1.5 rounded shadow-[0_0_8px_rgba(0,242,195,0.15)]">
 <span class="material-symbols-outlined text-[15px] text-primary-container" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
-<span>Resumir con Pi</span>
+<span>Resumir con IA</span>
 </button>
+<span id="summary-engine" class="font-label-sm text-label-sm text-on-surface-variant px-1 select-none" title="Motor de resumen detectado">sin motor</span>
 <button id="btn-summary-live" class="bg-surface-container text-on-surface hover:bg-surface-container-high border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2 py-0.5 flex items-center space-x-1 rounded">
 <span class="material-symbols-outlined text-[14px] text-on-surface-variant">history_toggle_off</span>
 <span>Resumir hasta ahora</span>
@@ -647,11 +648,12 @@
     if (st.starting) {
       $("footer-status").textContent = "Abriendo Subtitulos en vivo...";
     }
-    // Without Pi the summary buttons are inert.
-    var pi = st.piAvailable !== false;
+    // Summary buttons need a detected engine; the chip names it.
+    var available = st.summaryAvailable === true;
     ["btn-summary", "btn-summary-live", "btn-history-resume"].forEach(
-      function (id) { $(id).disabled = !pi; });
+      function (id) { $(id).disabled = !available; });
     $("btn-cancel-summary").disabled = !st.summaryRunning;
+    $("summary-engine").textContent = st.engineLabel || "sin motor";
     // S1: the auto-summary toggle mirrors the persisted setting.
     $("chk-auto-summary").checked = !!st.autoSummary;
   }

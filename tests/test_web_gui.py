@@ -31,6 +31,7 @@ web_gui = importlib.import_module("web_gui")
 transcriptor_core = importlib.import_module("transcriptor_core")
 app_settings = importlib.import_module("app_settings")
 pi_bridge = importlib.import_module("pi_bridge")
+summarizer = importlib.import_module("summarizer")
 
 
 def _free_port() -> int:
@@ -263,6 +264,20 @@ class TestHistorySearch(WebGuiServerTestCase):
         status, out = self._search("zzz-nada")
         self.assertEqual(status, 200)
         self.assertEqual(out["items"], [])
+
+
+class TestEngineState(WebGuiServerTestCase):
+    """S5: state reports the detected engine so the front enables buttons."""
+
+    def test_state_reports_engine_wiring(self) -> None:
+        status, body = self._get("/api/state")
+        self.assertEqual(status, 200)
+        state = json.loads(body)
+        engines = state["engines"]
+        self.assertEqual(set(engines), {"pi", "ollama", "cloud"})
+        expected = summarizer.engine_label(engines)
+        self.assertEqual(state["engineLabel"], expected)
+        self.assertEqual(state["summaryAvailable"], expected != "sin motor")
 
 
 class TestServerEvents(WebGuiServerTestCase):
