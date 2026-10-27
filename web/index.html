@@ -217,6 +217,10 @@
 <span class="material-symbols-outlined text-[14px] text-on-surface-variant">file_copy</span>
 <span>Copiar resumen</span>
 </button>
+<label class="bg-surface-container text-on-surface hover:bg-surface-container-high border border-outline-variant active:scale-[0.98] transition-all duration-150 font-label-sm text-label-sm px-2 py-0.5 flex items-center space-x-1 rounded cursor-pointer select-none" title="Resumen al parar: al cortar la sesión el resumen sale solo">
+<input id="chk-auto-summary" type="checkbox" class="w-3.5 h-3.5 cursor-pointer"/>
+<span>Auto</span>
+</label>
 </div>
 </div>
 <!-- Tab Navigation Row -->
@@ -569,6 +573,8 @@
     ["btn-summary", "btn-summary-live", "btn-history-resume"].forEach(
       function (id) { $(id).disabled = !pi; });
     $("btn-cancel-summary").disabled = !st.summaryRunning;
+    // S1: the auto-summary toggle mirrors the persisted setting.
+    $("chk-auto-summary").checked = !!st.autoSummary;
   }
 
   // --- SSE --------------------------------------------------------------- //
@@ -692,6 +698,12 @@
 
   // --- open current transcript ------------------------------------------- //
 
+  function wireAutoSummary() {
+    $("chk-auto-summary").addEventListener("change", function () {
+      act("set-auto-summary", { "enabled": this.checked });
+    });
+  }
+
   function wireOpenLast() {
     $("btn-open").addEventListener("click", function () {
       // The newest *_live-captions.md IS the session the last line came from.
@@ -720,6 +732,7 @@
     wireAction("btn-summary-live", "summary-live", true);
     wireAction("btn-cancel-summary", "cancel-summary");
     wireAction("btn-export-txt", "export-txt");
+    wireAutoSummary();
     wireHistoryButtons();
     wireCopyButtons();
     wireOpenLast();

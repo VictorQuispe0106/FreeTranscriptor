@@ -28,6 +28,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 import pi_bridge
+import app_settings
 from fluidez import clean
 from transcript_lines import parse_markdown, read_markdown, to_txt, write_utf8
 
@@ -37,6 +38,12 @@ TRANSCRIPTS_DIR = os.path.join(PROJECT_DIR, "transcripts")
 SNAPSHOTS_DIR = os.path.join(TRANSCRIPTS_DIR, ".snapshots")
 LIVE_CAPTURES = os.path.join(os.environ.get("WINDIR", r"C:\\Windows"),
                              "System32", "LiveCaptions.exe")
+
+
+def auto_summary_due(enabled: bool, transcript: str, pi_ok: bool) -> bool:
+    """S2: the only decision to auto-summarize on stop (shared with web)."""
+    return bool(enabled and pi_ok and transcript
+                and os.path.exists(transcript))
 
 # PowerShell 5.1 with a redirected stdout emits the OEM codepage; decode
 # defensively. The .md file is always written by the watcher as UTF-8.
@@ -269,6 +276,9 @@ class App(ttk.Frame):
         self.tail_active = False
         self.status_var = tk.StringVar(value="Listo.")
         self._history_map: dict[str, str] = {}
+        # S1: persisted "summarize on stop" toggle, shared with the web GUI.
+        self.auto_summary_var = tk.BooleanVar(
+            value=app_settings.get_bool("auto_summary"))
         self._build()
         self.pack(fill="both", expand=True)
         root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -321,7 +331,13 @@ class App(ttk.Frame):
         self.btn_summary.pack(side="left", padx=(0, 8))
         self.btn_live.pack(side="left", padx=(0, 8))
         self.btn_cancel.pack(side="left", padx=(0, 8))
-        self.btn_copy_sum.pack(side="left")
+        self.btn_copy_sum.pack(side="left", padx=(0, 8))
+        # S1/S2: when checked, Parar starts the Pi summary by itself.
+        self.chk_auto_summary = ttk.Checkbutton(
+            derived, text="Resumen al parar",
+            variable=self.auto_summary_var,
+            command=self._on_auto_summary_toggle)
+        self.chk_auto_summary.pack(side="left")
 
         # S1: session history row. Actions apply to the selected prior file,
         # never to the running session.
@@ -440,6 +456,9 @@ class App(ttk.Frame):
 
     # --- actions -------------------------------------------------------- #
 
+    def _on_auto_summary_toggle(self) -> None:
+        app_settings.set_bool("auto_summary", self.auto_summary_var.get())
+
     def _remember_transcript(self, path: str) -> None:
         self.last_transcript = path
         self.btn_export.configure(state="normal")
@@ -480,12 +499,19 @@ class App(ttk.Frame):
         self.root.after(0, do_start)
 
     def stop(self) -> None:
+        had_session = self.session is not None
         if self.session:
             self.session.stop()
             self.session = None
         self.btn_stop.configure(state="disabled")
         self.btn_start.configure(state="normal")
         self.btn_live.configure(state="disabled")
+        # S2: with the toggle on, the closing session gets its Pi summary
+        # for free. App close (\_on\_close) never triggers it.
+        if had_session and auto_summary_due(
+                self.auto_summary_var.get(), self.last_transcript,
+                pi_bridge.available()):
+            self.run_summary()
 
     def open_transcript(self) -> None:
         if not self.session or not self.session.out_path:

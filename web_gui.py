@@ -24,13 +24,15 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import pi_bridge
+import app_settings
 from fluidez import clean
 from transcript_lines import parse_markdown, read_markdown, to_txt, write_utf8
 
 import transcriptor_app
 from transcriptor_app import (PROJECT_DIR, SNAPSHOTS_DIR, TRANSCRIPTS_DIR,
-                              WatcherSession, launch_livecaptions,
-                              list_transcripts, render_limpio, render_resumen)
+                              WatcherSession, auto_summary_due,
+                              launch_livecaptions, list_transcripts,
+                              render_limpio, render_resumen)
 
 WEB_DIR = os.path.join(PROJECT_DIR, "web")
 PORT = int(os.environ.get("TRANSCRIPTOR_PORT", "8737"))
@@ -163,6 +165,14 @@ class Orchestrator:
             session, self.session = self.session, None
         if session:
             session.stop()
+            self.publish_state()
+            # S2: with the persisted toggle on, the closing session gets its
+            # Pi summary for free. The server shutdown path never routes here.
+            if auto_summary_due(app_settings.get_bool("auto_summary"),
+                                self.last_transcript,
+                                pi_bridge.available()):
+                self.run_summary()
+            return ""
         self.publish_state()
         return ""
 
@@ -310,6 +320,7 @@ class Handler(BaseHTTPRequestHandler):
                 "piAvailable": pi_bridge.available(),
                 "status": orch.status,
                 "history": [name for name, _ in orch.history],
+                "autoSummary": app_settings.get_bool("auto_summary"),
             })
             return
         if path == "/api/history":
@@ -350,6 +361,12 @@ class Handler(BaseHTTPRequestHandler):
             error = orch.run_summary(live=True)
         elif action == "cancel-summary":
             error = orch.cancel_summary()
+        elif action == "set-auto-summary":
+            try:
+                app_settings.set_bool("auto_summary",
+                                      bool(body.get("enabled")))
+            except (OSError, KeyError) as exc:
+                error = f"No se pudo guardar el ajuste: {exc}"
         elif action == "export-txt":
             error = self._export_txt()
         elif action == "export-history":

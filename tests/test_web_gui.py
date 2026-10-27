@@ -28,6 +28,7 @@ if ROOT not in sys.path:
 
 web_gui = importlib.import_module("web_gui")
 transcriptor_app = importlib.import_module("transcriptor_app")
+app_settings = importlib.import_module("app_settings")
 pi_bridge = importlib.import_module("pi_bridge")
 
 
@@ -140,6 +141,101 @@ class TestGetState(WebGuiServerTestCase):
         self.assertIn("history", state)
         self.assertIsInstance(state["history"], list)
         self.assertIn(self.history_md, state["history"])
+
+
+class TestAutoSummarySetting(WebGuiServerTestCase):
+    """S1: the toggle is visible in state and persists via one action."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._config = _Restore(
+            app_settings,
+            CONFIG_PATH=os.path.join(self.tmp_dir, "transcriptor_config.json"))
+        self._config.__enter__()
+
+    def tearDown(self) -> None:
+        self._config.__exit__()
+        super().tearDown()
+
+    def test_state_exposes_auto_summary_default_off(self) -> None:
+        status, body = self._get("/api/state")
+        self.assertEqual(status, 200)
+        self.assertIs(json.loads(body)["autoSummary"], False)
+
+    def test_set_auto_summary_persists_and_reports(self) -> None:
+        status, body = self._post(
+            "/api/action", json.dumps({"action": "set-auto-summary",
+                                        "enabled": True}))
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body)["ok"])
+        self.assertTrue(app_settings.get_bool("auto_summary"))
+        status, body = self._get("/api/state")
+        self.assertIs(json.loads(body)["autoSummary"], True)
+
+    def test_set_auto_summary_accepts_false(self) -> None:
+        app_settings.set_bool("auto_summary", True)
+        status, body = self._post(
+            "/api/action", json.dumps({"action": "set-auto-summary",
+                                        "enabled": False}))
+        self.assertTrue(json.loads(body)["ok"])
+        self.assertFalse(app_settings.get_bool("auto_summary"))
+
+
+class TestStopTriggersAutoSummary(WebGuiServerTestCase):
+    """S2: stopping a session with the toggle on starts the Pi summary."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._config = _Restore(
+            app_settings,
+            CONFIG_PATH=os.path.join(self.tmp_dir, "transcriptor_config.json"))
+        self._config.__enter__()
+
+    def tearDown(self) -> None:
+        self._config.__exit__()
+        super().tearDown()
+
+    def test_stop_with_toggle_on_runs_summary(self) -> None:
+        orch = web_gui.Handler.orchestrator
+        orch.last_transcript = os.path.join(self.transcripts_dir,
+                                            self.history_md)
+        orch.session = _FakeSession()
+        calls: list[tuple] = []
+        original = orch.run_summary
+        orch.run_summary = (  # type: ignore[method-assign]
+            lambda *a, **k: calls.append(a) or "")
+        try:
+            app_settings.set_bool("auto_summary", True)
+            orch.stop()
+        finally:
+            orch.run_summary = original  # type: ignore[method-assign]
+        self.assertEqual(calls, [()])
+        self.assertIsNone(orch.session)
+
+    def test_stop_with_toggle_off_does_not_summarize(self) -> None:
+        orch = web_gui.Handler.orchestrator
+        orch.last_transcript = os.path.join(self.transcripts_dir,
+                                            self.history_md)
+        orch.session = _FakeSession()
+        calls: list[tuple] = []
+        original = orch.run_summary
+        orch.run_summary = (  # type: ignore[method-assign]
+            lambda *a, **k: calls.append(a) or "")
+        try:
+            orch.stop()
+        finally:
+            orch.run_summary = original  # type: ignore[method-assign]
+        self.assertEqual(calls, [])
+
+
+class _FakeSession:
+    """Minimal WatcherSession double: stop() must be callable exactly."""
+
+    def __init__(self) -> None:
+        self.stopped = False
+
+    def stop(self, timeout_s: float = 5.0) -> None:
+        self.stopped = True
 
 
 class TestServerEvents(WebGuiServerTestCase):
